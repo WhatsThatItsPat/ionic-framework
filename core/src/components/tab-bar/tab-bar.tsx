@@ -1,5 +1,7 @@
 import type { ComponentInterface, EventEmitter } from '@stencil/core';
-import { Component, Event, Host, Prop, Watch, h } from '@stencil/core';
+import { Component, Element, Event, Host, Prop, Watch, h } from '@stencil/core';
+import type { KeyboardController } from '@utils/keyboard/keyboard-controller';
+import { createKeyboardController } from '@utils/keyboard/keyboard-controller';
 import { createColorClasses } from '@utils/theme';
 
 import { getIonMode } from '../../global/ionic-global';
@@ -19,7 +21,11 @@ import type { TabBarChangedEventDetail } from './tab-bar-interface';
   shadow: true,
 })
 export class TabBar implements ComponentInterface {
+  private keyboardCtrl: KeyboardController | null = null;
+  private keyboardCtrlPromise: Promise<KeyboardController> | null = null;
   private didLoad = false;
+
+  @Element() el!: HTMLElement;
 
   /**
    * The color to use from your application's color palette.
@@ -77,6 +83,55 @@ export class TabBar implements ComponentInterface {
       this.ionTabBarChanged.emit({
         tab: this.selectedTab,
       });
+    }
+  }
+
+  async connectedCallback() {
+    const promise = createKeyboardController(async (keyboardOpen, waitForResize) => {
+      /**
+       * If the keyboard is hiding, then we need to wait
+       * for the webview to resize. Otherwise, the tab bar
+       * will flicker before the webview resizes.
+       */
+      if (keyboardOpen === false && waitForResize !== undefined) {
+        await waitForResize;
+      }
+
+      /**
+       * @deprecated - `tab-bar-hidden` is deprecated. The tab bar is now hidden
+       * via the `:host-context(ion-app.keyboard-showing)` CSS selector.
+       * This class is kept for backward compatibility and will be removed in a
+       * future major version of Ionic.
+       */
+      const shouldHide = keyboardOpen && this.el.getAttribute('slot') !== 'top';
+      this.el.classList.toggle('tab-bar-hidden', shouldHide);
+    });
+    this.keyboardCtrlPromise = promise;
+
+    const keyboardCtrl = await promise;
+
+    /**
+     * Only assign if this is still the current promise.
+     * Otherwise, a new connectedCallback has started or
+     * disconnectedCallback was called, so destroy this instance.
+     */
+    if (this.keyboardCtrlPromise === promise) {
+      this.keyboardCtrl = keyboardCtrl;
+      this.keyboardCtrlPromise = null;
+    } else {
+      keyboardCtrl.destroy();
+    }
+  }
+
+  disconnectedCallback() {
+    if (this.keyboardCtrlPromise) {
+      this.keyboardCtrlPromise.then((ctrl) => ctrl.destroy());
+      this.keyboardCtrlPromise = null;
+    }
+
+    if (this.keyboardCtrl) {
+      this.keyboardCtrl.destroy();
+      this.keyboardCtrl = null;
     }
   }
 
