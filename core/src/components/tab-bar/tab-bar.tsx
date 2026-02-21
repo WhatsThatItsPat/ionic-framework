@@ -2,6 +2,7 @@ import type { ComponentInterface, EventEmitter } from '@stencil/core';
 import { Component, Element, Event, Host, Prop, Watch, h } from '@stencil/core';
 import type { KeyboardController } from '@utils/keyboard/keyboard-controller';
 import { createKeyboardController } from '@utils/keyboard/keyboard-controller';
+import { printIonWarning } from '@utils/logging';
 import { createColorClasses } from '@utils/theme';
 
 import { getIonMode } from '../../global/ionic-global';
@@ -24,6 +25,11 @@ export class TabBar implements ComponentInterface {
   private keyboardCtrl: KeyboardController | null = null;
   private keyboardCtrlPromise: Promise<KeyboardController> | null = null;
   private didLoad = false;
+  /**
+   * Tracks whether the deprecation warning for `tab-bar-hidden` has been
+   * issued yet. The warning fires at most once per component instance.
+   */
+  private hasWarnedDeprecation = false;
 
   @Element() el!: HTMLElement;
 
@@ -104,6 +110,14 @@ export class TabBar implements ComponentInterface {
        * future major version of Ionic.
        */
       const shouldHide = keyboardOpen && this.el.getAttribute('slot') !== 'top';
+      if (shouldHide && !this.hasWarnedDeprecation) {
+        printIonWarning(
+          '[ion-tab-bar] - The `tab-bar-hidden` class is deprecated and will be removed in a future major version of Ionic. ' +
+            'Use `ion-app.keyboard-showing` instead to respond to keyboard visibility changes.',
+          this.el
+        );
+        this.hasWarnedDeprecation = true;
+      }
       this.el.classList.toggle('tab-bar-hidden', shouldHide);
     });
     this.keyboardCtrlPromise = promise;

@@ -42,4 +42,31 @@ describe('ion-tab-bar: tab-bar-hidden (deprecated)', () => {
 
     expect(tabBarEl.classList.contains('tab-bar-hidden')).toBe(false);
   });
+
+  it('should warn about tab-bar-hidden deprecation when keyboard first opens', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const page = await newSpecPage({
+      components: [TabBar],
+      html: '<ion-tab-bar></ion-tab-bar>',
+    });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new Event('keyboardWillShow'));
+    await page.waitForChanges();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toContain('tab-bar-hidden');
+
+    // Second keyboard open should not re-warn
+    window.dispatchEvent(new Event('keyboardWillHide'));
+    await page.waitForChanges();
+    window.dispatchEvent(new Event('keyboardWillShow'));
+    await page.waitForChanges();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
+  });
 });
