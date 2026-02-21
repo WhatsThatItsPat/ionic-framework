@@ -70,6 +70,13 @@
   border-bottom: var(--border);
 }
 
+/**
+ * @deprecated - The `tab-bar-hidden` class has been deprecated in favor
+ * of using the `keyboard-is-open` class on `ion-app` to respond to keyboard
+ * visibility changes. Use `ion-app.keyboard-is-open` in your CSS to apply
+ * styles when the keyboard is open. This class will be removed in a future
+ * major version of Ionic.
+ */
 :host(.tab-bar-hidden) {
   /* stylelint-disable-next-line declaration-no-important */
   display: none !important;
