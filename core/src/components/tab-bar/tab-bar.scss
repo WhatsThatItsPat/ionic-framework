@@ -71,13 +71,15 @@
 }
 
 /**
- * @deprecated - The `tab-bar-hidden` class has been deprecated in favor
- * of using the `keyboard-is-open` class on `ion-app` to respond to keyboard
- * visibility changes. Use `ion-app.keyboard-is-open` in your CSS to apply
- * styles when the keyboard is open. This class will be removed in a future
- * major version of Ionic.
+ * @deprecated - The `tab-bar-hidden` class is deprecated in favor of using
+ * `ion-app.keyboard-showing` (set by `ion-app` when the keyboard opens).
+ * The new `:host-context(ion-app.keyboard-showing)` selector below handles
+ * hiding the tab bar via CSS. The `:host(.tab-bar-hidden)` selector is kept
+ * as a backward-compatible fallback and will be removed in a future major
+ * version of Ionic.
  */
-:host(.tab-bar-hidden) {
+:host(.tab-bar-hidden),
+:host-context(ion-app.keyboard-showing):not([slot="top"]) {
   /* stylelint-disable-next-line declaration-no-important */
   display: none !important;
 }

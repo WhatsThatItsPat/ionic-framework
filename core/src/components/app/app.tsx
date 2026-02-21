@@ -29,7 +29,7 @@ export class App implements ComponentInterface {
       /**
        * If the keyboard is hiding, then we need to wait
        * for the webview to resize. Otherwise, content relying
-       * on the keyboard-is-open class will reflow before
+       * on the keyboard-showing class will reflow before
        * the webview resizes.
        */
       if (keyboardOpen === false && waitForResize !== undefined) {
@@ -148,7 +148,7 @@ export class App implements ComponentInterface {
           [mode]: true,
           'ion-page': true,
           'force-statusbar-padding': config.getBoolean('_forceStatusbarPadding'),
-          'keyboard-is-open': this.keyboardVisible,
+          'keyboard-showing': this.keyboardVisible,
         }}
       ></Host>
     );
