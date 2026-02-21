@@ -1,7 +1,5 @@
 import type { ComponentInterface, EventEmitter } from '@stencil/core';
-import { Component, Element, Event, Host, Prop, State, Watch, h } from '@stencil/core';
-import type { KeyboardController } from '@utils/keyboard/keyboard-controller';
-import { createKeyboardController } from '@utils/keyboard/keyboard-controller';
+import { Component, Event, Host, Prop, Watch, h } from '@stencil/core';
 import { createColorClasses } from '@utils/theme';
 
 import { getIonMode } from '../../global/ionic-global';
@@ -21,13 +19,7 @@ import type { TabBarChangedEventDetail } from './tab-bar-interface';
   shadow: true,
 })
 export class TabBar implements ComponentInterface {
-  private keyboardCtrl: KeyboardController | null = null;
-  private keyboardCtrlPromise: Promise<KeyboardController> | null = null;
   private didLoad = false;
-
-  @Element() el!: HTMLElement;
-
-  @State() keyboardVisible = false;
 
   /**
    * The color to use from your application's color palette.
@@ -88,61 +80,16 @@ export class TabBar implements ComponentInterface {
     }
   }
 
-  async connectedCallback() {
-    const promise = createKeyboardController(async (keyboardOpen, waitForResize) => {
-      /**
-       * If the keyboard is hiding, then we need to wait
-       * for the webview to resize. Otherwise, the tab bar
-       * will flicker before the webview resizes.
-       */
-      if (keyboardOpen === false && waitForResize !== undefined) {
-        await waitForResize;
-      }
-
-      this.keyboardVisible = keyboardOpen; // trigger re-render by updating state
-    });
-    this.keyboardCtrlPromise = promise;
-
-    const keyboardCtrl = await promise;
-
-    /**
-     * Only assign if this is still the current promise.
-     * Otherwise, a new connectedCallback has started or
-     * disconnectedCallback was called, so destroy this instance.
-     */
-    if (this.keyboardCtrlPromise === promise) {
-      this.keyboardCtrl = keyboardCtrl;
-      this.keyboardCtrlPromise = null;
-    } else {
-      keyboardCtrl.destroy();
-    }
-  }
-
-  disconnectedCallback() {
-    if (this.keyboardCtrlPromise) {
-      this.keyboardCtrlPromise.then((ctrl) => ctrl.destroy());
-      this.keyboardCtrlPromise = null;
-    }
-
-    if (this.keyboardCtrl) {
-      this.keyboardCtrl.destroy();
-      this.keyboardCtrl = null;
-    }
-  }
-
   render() {
-    const { color, translucent, keyboardVisible } = this;
+    const { color, translucent } = this;
     const mode = getIonMode(this);
-    const shouldHide = keyboardVisible && this.el.getAttribute('slot') !== 'top';
 
     return (
       <Host
         role="tablist"
-        aria-hidden={shouldHide ? 'true' : null}
         class={createColorClasses(color, {
           [mode]: true,
           'tab-bar-translucent': translucent,
-          'tab-bar-hidden': shouldHide,
         })}
       >
         <slot></slot>
