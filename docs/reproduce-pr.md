@@ -136,6 +136,8 @@ render() {
 }
 ```
 
+> **Note — intentional "mistake":** This commit deliberately removes `tab-bar-hidden` emission entirely. This is a breaking change masquerading as a cleanup. We fix it properly in commit 3. Whether you're following this guide for a video series or just learning, the value of discovering this mistake (rather than pre-emptively avoiding it) is significant: it teaches the difference between "I no longer set this class" and "I deprecated this class." If you're working methodically rather than for video content, you can include the `classList.toggle` and deprecation warning here in commit 2 — but showing the mistake first and then restoring it more deliberately makes the reasoning clearer.
+
 ### 2c. Verify
 
 ```bash
@@ -245,6 +247,18 @@ npm run lint.ts && npm run lint.sass
 | 2 | `feat(tab-bar): move keyboard hiding to CSS :host-context()` | `tab-bar.scss`, `tab-bar.tsx` |
 | 3 | `fix(tab-bar): restore tab-bar-hidden emission for proper deprecation period` | `tab-bar.tsx`, `tab-bar.spec.ts` |
 | 4 | `feat(tab-bar): add deprecation warning for tab-bar-hidden class` | `tab-bar.tsx`, `tab-bar.spec.ts` |
+
+---
+
+## Known testing gaps
+
+These items were not covered by the spec tests written in this guide. A complete PR to the upstream `ionic-team` repository would ideally include:
+
+1. **E2E test for `:host-context()` CSS.** The rule that visually hides `ion-tab-bar` when `ion-app.keyboard-showing` is set is not tested in a real browser. A Playwright e2e test in `core/src/components/tab-bar/test/` would verify the CSS rule works correctly.
+
+2. **E2E accessibility test.** The existing `tab-button.e2e.ts` uses axe-core to verify no accessibility violations. A similar test on a page that includes `ion-tab-bar` with keyboard-triggered hide/show behavior would verify that `display: none` properly removes the element from the AT tree — especially given the `contain: strict` CSS that `ion-tab-bar` uses.
+
+3. **The `slot="top"` case.** The spec test for a top-slotted tab bar was omitted because jsdom doesn't handle the `slot` attribute during keyboard callbacks the same way a real browser does. This is a Playwright e2e candidate.
 
 ---
 

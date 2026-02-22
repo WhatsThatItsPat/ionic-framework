@@ -199,6 +199,15 @@ After making further changes to `ionic-framework`:
    ```
    The filename stays the same between builds (it uses the version number from `package.json`), so you can re-run the same `npm install` command.
 
+3. **For Angular apps:** Clear the Angular compilation cache after each reinstall:
+   ```bash
+   rm -rf .angular/
+   ng serve
+   ```
+   Angular caches compiled templates in `.angular/cache/`. If you skip this, you may see your old Ionic version's behavior even after installing the new tarball.
+
+4. **For Angular apps with `watch` mode:** The Angular dev server (`ng serve`) does not automatically detect changes inside `node_modules`. After reinstalling a `.tgz`, you must restart the dev server. If you're making very frequent core changes, consider using `npm start` in `ionic-framework/core` (which watches source files and rebuilds) combined with a separate `npm run sync` step in the Angular package.
+
 ---
 
 ## Why not `npm link`?
