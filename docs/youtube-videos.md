@@ -60,15 +60,20 @@ A proposed series walking through the real process of authoring a Feature Reques
   - Watch `ion-tab-bar` gain the class `tab-bar-hidden` when the keyboard opens
   - Note how deeply nested it is — this is exactly why it's not useful from the outside
 
-- **Understand `ion-tabs` shadow DOM structure.** In the inspector, expand `ion-tabs`'s shadow root. You'll see:
+- **Understand `ion-tabs` shadow DOM structure.** In the inspector, expand `ion-tabs`'s shadow root. You'll see the insertion points inside the shadow tree:
   ```
   #shadow-root (open)
     <slot name="top"></slot>
     <div class="tabs-inner">
       <slot></slot>
     </div>
-    <slot name="bottom"></slot>  ← ion-tab-bar is slotted here
+    <slot name="bottom"></slot>  ← the insertion point
   ```
+  But in the light DOM (outside the shadow root), the actual element is:
+  ```html
+  <ion-tab-bar slot="bottom" role="tablist" class="md hydrated">
+  ```
+  The `slot="bottom"` attribute on `ion-tab-bar` is what tells the browser to project it into `<slot name="bottom">`. The tab bar element itself lives in the light DOM — that's what gains the `tab-bar-hidden` class. This distinction matters for CSS: `ion-tab-bar`'s classes live in the light DOM, so in principle they're accessible from anywhere, but the CSS rule that *uses* them (`:host(.tab-bar-hidden)`) lives inside the shadow DOM stylesheet.
 
   > **Sidebar: The hack at your day job.** You once needed to create a custom element that sat between the content and the tab bar. You added a sibling to `.tabs-inner` *inside* `ion-tabs`'s shadow DOM and discovered you could target `.tab-bar-hidden` from there. Why did it work?
   >
@@ -212,6 +217,7 @@ A proposed series walking through the real process of authoring a Feature Reques
 - **CSS can replace JS when the signal is in the DOM.** Once `ion-app` exposes state, shadow components can react to it with pure CSS.
 - **Fewer moving parts = fewer bugs.** One `KeyboardController` in `ion-app` vs two (one per component) eliminates timing and lifecycle risks.
 - **When to use `:host-context()`.** Only in Capacitor/Cordova contexts, or where you can guarantee Chromium/WebKit support. Document your reasoning.
+- **Is this less performant than the original approach?** No — comparable today, slightly better after deprecation. The original approach: one `KeyboardController` in `ion-tab-bar` → `@State` change → full Stencil re-render of `ion-tab-bar`. Our approach: one `KeyboardController` in `ion-app` → `@State` change → trivial Stencil re-render of `ion-app` (just updates a class map); the CSS cascade reacts to the class at zero JS cost. The `ion-tab-bar` backward-compat callback uses `classList.toggle` directly — cheaper than a full render cycle. Once deprecation is complete (backward-compat controller removed from `tab-bar`), we'll have *fewer* controller instances than before.
 
 ---
 
@@ -255,6 +261,20 @@ A proposed series walking through the real process of authoring a Feature Reques
 
 - **Is `tab-bar-hidden` a public API?** It was never documented as a public API, but that doesn't matter. If people are using it — and they are (as you know from your own day job) — removing it without warning is a breaking change.
 
+  > **Tip for the video:** Search for `tab-bar-hidden` on the official [Ionic docs site](https://ionicframework.com/docs). You'll find zero results. That confirms this was always an internal/undocumented API. But that doesn't make it safe to remove quietly — undocumented APIs get discovered through DOM inspection (exactly the way you found it), and once someone builds a production feature on top of one, it becomes effectively public. The lesson: be conservative about removals regardless of whether something is "public."
+
+- **Why is `@State` no longer needed in `tab-bar`?**
+  `@State` exists to tell Stencil "this value drives my rendered output — when it changes, re-run `render()`." It was originally needed because `keyboardVisible` appeared in `render()` to compute `shouldHide`, which then set `aria-hidden` and the `tab-bar-hidden` class.
+
+  After our refactor:
+  - `aria-hidden` is gone (CSS `display: none` handles the AT tree)
+  - The visual hiding is done by `:host-context()` CSS — Stencil's render cycle has no part in that
+  - `tab-bar-hidden` is now a backward-compat shim, not a rendering decision
+
+  Nothing in `render()` needs to know about keyboard state anymore. So there's nothing to trigger a re-render *for*. `classList.toggle` mutates the host element directly — no virtual DOM, no diffing, no re-render. It's the right tool when you're imperatively managing a class that isn't part of the component's shadow template.
+
+  This is an important Stencil (and more broadly, reactive UI) principle: **only put things in state that affect your rendered output.** If a value drives a side effect but not the template, it doesn't belong in `@State`.
+
 - **The fix: keep it alive, but differently.** Bring the `KeyboardController` back to `tab-bar`, but use it only to emit the deprecated class:
   ```ts
   this.el.classList.toggle('tab-bar-hidden', shouldHide);
@@ -288,34 +308,60 @@ A proposed series walking through the real process of authoring a Feature Reques
 
 ---
 
-## Episode 8 — Testing: Spec Tests, E2E, and the Gaps
+## Episode 8 — Writing the E2E Tests
 
 **Duration:** ~20 min  
-**Covers testing across all commits**
+**Commit covered:** `test(app,tab-bar): add e2e tests for keyboard-showing and CSS hiding`
 
 ### What to cover
 
-- **Two test types in this repo:**
-  - **Spec tests** (`*.spec.ts`) — fast, jsdom-based, use Stencil's `newSpecPage`. Good for JS behavior, event handling, class manipulation, deprecation warnings.
-  - **E2E tests** (`*.e2e.ts`) — Playwright in a real browser. Good for visual regression, real CSS rendering (`:host-context()`), real keyboard events, accessibility tree.
+- **Why these need to be e2e tests, not spec tests.** The two things we're testing — (1) the `keyboard-showing` class appearing on `ion-app` and (2) `ion-tab-bar` becoming hidden via `:host-context()` CSS — both involve computed styles or shadow DOM rendering that jsdom doesn't support.
 
-- **Walk through `app.spec.ts`.** Show the full anatomy of a Stencil spec test.
+- **The Playwright setup.** E2E tests in this repo use Playwright running in Chromium. The tests are in `*.e2e.ts` files in a `test/` subdirectory. Each test uses `page.setContent()` or `page.goto()` to load HTML, and the Ionic bundle is injected automatically. Note: these tests run against the **built** `dist/` files, not the TypeScript source. You need `npm run build` first.
 
-- **Walk through `tab-bar.spec.ts`.** Deprecation tests — why the test comments say "delete me in the next major version."
+- **Write `app/test/keyboard/app.e2e.ts`:**
+  ```ts
+  configs({ modes: ['ios'], directions: ['ltr'] }).forEach(({ title, config }) => {
+    test.describe(title('app: keyboard'), () => {
+      test('should add keyboard-showing class when keyboard opens', async ({ page }) => {
+        await page.setContent(`<ion-app></ion-app>`, config);
+        const ionApp = page.locator('ion-app');
+        await expect(ionApp).not.toHaveClass(/keyboard-showing/);
+        await page.evaluate(() => window.dispatchEvent(new Event('keyboardWillShow')));
+        await page.waitForChanges();
+        await expect(ionApp).toHaveClass(/keyboard-showing/);
+      });
+      // ... remove test similarly
+    });
+  });
+  ```
+  Key APIs:
+  - `page.evaluate(() => window.dispatchEvent(...))` — runs code in the browser to simulate the native event
+  - `page.waitForChanges()` — waits for Stencil to process state changes and re-render
+  - `expect(locator).toHaveClass(/regex/)` — asserts class presence without caring about other classes
 
-- **What we didn't write (and should have).** There are two testing gaps in this PR:
-  1. **E2E for `:host-context()`.** The CSS rule hiding the tab bar is not tested in a real browser. If a future Chromium or WebKit version changes `:host-context()` behavior, we'd find out in production, not in CI.
-  2. **E2E for accessibility.** The existing tab-bar e2e tests only test safe-area padding. A proper accessibility test (using axe-core like `tab-button.e2e.ts`) would verify AT behavior during keyboard hide.
+- **Write `tab-bar/test/keyboard/tab-bar.e2e.ts`:**
+  Four tests:
+  1. `should hide via CSS when keyboard opens` — asserts `toBeHidden()` after `keyboardWillShow`
+  2. `should show again when keyboard closes` — asserts `toBeVisible()` after `keyboardWillHide`
+  3. `should not hide when slot="top"` — asserts `toBeVisible()` even after `keyboardWillShow` (**this is the test that couldn't be written as a spec test**)
+  4. `should still set deprecated tab-bar-hidden class` — marked `@deprecated`, asserts backward compat
 
-  > Look at `tab-button.e2e.ts` as the example. A similar test for `keyboard-showing` would load a page with `ion-app` + `ion-tab-bar`, simulate a keyboard open event, and run axe.
+- **Explain `toBeHidden()`.** Playwright's `toBeHidden()` checks computed visibility — if the shadow DOM's `:host-context()` rule applies `display: none` to the `ion-tab-bar` host element, the element's computed `display` is `none` from the outside. Playwright can see this. This is the key reason these tests are meaningful: they prove the CSS actually works in a real Chromium engine.
 
-- **The `slot="top"` test gotcha.** A spec test for the top-slotted case failed because jsdom doesn't handle `getAttribute('slot')` the same way a real browser does when the element is slotted. This is a test-environment limitation — the correct test for this behavior would be an e2e test.
+- **Run a single e2e test locally:**
+  ```bash
+  cd core
+  npm run build   # required — e2e tests run against dist/
+  npx playwright test --grep "tab-bar: keyboard"
+  ```
 
 ### Tips & lessons
 
-- **Know your test environment.** jsdom doesn't render CSS, doesn't process `contain:`, and has slot behavior quirks. If you're testing CSS or DOM APIs, write e2e.
-- **Test the behavior, not the implementation.** Assert the class is present/absent, not which internal method was called.
-- **`jest.spyOn` + `mockRestore()`.** Essential discipline. Missing `mockRestore()` will cause strange failures in unrelated tests.
+- **E2E tests need a build.** Unlike spec tests (which run against TypeScript source), Playwright tests need `npm run build` first. Show the error you get if you forget.
+- **`page.evaluate` runs in browser context.** This is how you trigger the keyboard events. The callback you pass runs in the browser's JS context, not Node.js.
+- **Mode-locked tests.** These tests use `configs({ modes: ['ios'], directions: ['ltr'] })` because keyboard behavior doesn't differ by mode. Using the full `configs()` would run redundant tests.
+- **Delete the deprecated test when the class is removed.** The `@deprecated` comment on the test is a reminder — it's not just for docs.
 
 ---
 
@@ -380,6 +426,87 @@ This is a synthesis episode pulling out all the Angular threads from the series 
   - `effect()` — side effects (like subscribing)
   - How `keyboard-showing` (a CSS class) means you often don't need a signal at all for UI visibility — CSS handles it directly. Signals shine for data flow, not visual state that CSS can express.
 
+- **Keyboard state in Angular — three approaches (from old to new).** This is a great teaching progression showing how Angular idioms have evolved:
+
+  **Approach 1 — Class binding + `@HostListener` (older style):**
+  ```typescript
+  @Component({ selector: 'app-tabs', template: `...` })
+  export class TabsComponent {
+    isKeyboardShowing = false;
+
+    @HostListener('window:keyboardWillShow')
+    onKeyboardShow() { this.isKeyboardShowing = true; }
+
+    @HostListener('window:keyboardWillHide')
+    onKeyboardHide() { this.isKeyboardShowing = false; }
+  }
+  ```
+  And in the template: `[class.keyboard-showing]="isKeyboardShowing"`.
+  Explain: `@HostListener` attaches an event listener to the window or host element. This is the Angular "wrapper pattern" around native events. Note that this operates at the component level — you'd have to duplicate it everywhere you need keyboard state.
+
+  > This is also a chance to discuss where this lives. If you put it in a tab component, it only affects that component. The Feature Request was asking for this to live on `ion-app`, which is exactly what our PR does — making it global. You could move it from `ion-app` up to `document.body` or even `html` (the root element), but `ion-app` is where Ionic puts other app-wide classes (like the mode class `md` or `ios`), so it's the natural home.
+
+  **Approach 2 — Signal + `@Capacitor/Keyboard` (from the Feature Request, modern style):**
+  ```typescript
+  @Component({ standalone: true, selector: 'app-tabs', template: `...` })
+  export class TabsComponent {
+    isKeyboardShowing = signal(false);
+
+    constructor() {
+      Keyboard.addListener('keyboardWillShow', () => this.isKeyboardShowing.set(true));
+      Keyboard.addListener('keyboardWillHide', () => setTimeout(() => this.isKeyboardShowing.set(false), 50));
+    }
+  }
+  ```
+  Show how `signal()` from `@angular/core` (Angular 16+) replaces the mutable boolean and integrates with the new change detection system. The `setTimeout` timing hack is the smell that motivates the PR.
+
+  **Approach 3 — Pure CSS with `keyboard-showing` (after our PR):**
+  No JavaScript needed for UI hiding. In `global.scss` or component CSS:
+  ```scss
+  ion-app.keyboard-showing .my-custom-footer {
+    display: none;
+  }
+  // Or in a component with :host-context():
+  :host-context(ion-app.keyboard-showing) .my-custom-footer {
+    display: none;
+  }
+  ```
+  For data-driven use cases (updating non-CSS state when keyboard opens), you can still use Signals — but bound to the DOM class, not a separate event listener:
+  ```typescript
+  @Component({ standalone: true })
+  export class TabsComponent {
+    isKeyboardShowing = signal(false);
+
+    private ionAppMutation = new MutationObserver(() => {
+      this.isKeyboardShowing.set(
+        document.querySelector('ion-app')?.classList.contains('keyboard-showing') ?? false
+      );
+    });
+
+    constructor() {
+      const ionApp = document.querySelector('ion-app');
+      if (ionApp) {
+        this.ionAppMutation.observe(ionApp, { attributes: true, attributeFilter: ['class'] });
+      }
+    }
+    ngOnDestroy() { this.ionAppMutation.disconnect(); }
+  }
+  ```
+  Or more idiomatically, using `@capacitor/keyboard` listeners but reading the class state from `ion-app` (no timing hack needed since `keyboard-showing` has the right timing built in).
+
+  > **Discussion for the video:** Ask whether moving the state from `ion-app` up to the document root element (`html`) would make any practical difference. The answer: probably not — `ion-app` is already at the top of the Ionic component tree. Ionic puts the mode class (`md`/`ios`), `ion-palette-*` classes, and now `keyboard-showing` on `ion-app`. That's the established convention.
+
+- **The `async` pipe (legacy approach worth knowing).** Before Signals, keyboard state in Angular was often expressed as an Observable:
+  ```typescript
+  // keyboard.service.ts
+  keyboardShowing$ = new BehaviorSubject(false);
+  ```
+  And in a template:
+  ```html
+  <footer [class.hidden]="keyboardShowing$ | async">...</footer>
+  ```
+  The `async` pipe subscribes and unsubscribes automatically. It's still valid, but Signals are the modern replacement. Show the comparison side-by-side: `signal()` vs `BehaviorSubject` vs reading from the DOM class.
+
 - **Angular's `ChangeDetectionStrategy.OnPush`.** In a tabbed app, the tab components that aren't active shouldn't recheck on every cycle. Show how `OnPush` + Signals is the modern pattern.
 
 - **Zone.js vs Zoneless.** Ionic components use native web events. When you call `Keyboard.addListener`, the callback fires outside Angular's zone (unless you use `NgZone.run(...)`). Show how Signals-based state management avoids this zone problem entirely — a signal update triggers change detection regardless of zone.
@@ -418,13 +545,13 @@ This is a synthesis episode pulling out all the Angular threads from the series 
 | # | Title | Key Concept | Angular Angle |
 |---|-------|-------------|---------------|
 | 1 | The Problem: Building the Example App | FR due diligence, workaround first | Signals, standalone components |
-| 2 | Safari DevTools: Reading the DOM | DOM inspection, shadow root structure | — |
+| 2 | Safari DevTools: Reading the DOM | DOM inspection, shadow root / slot structure | — |
 | 3 | Navigating the Ionic Codebase | Grep-first, trace the data flow | — |
 | 4 | Implementing: `keyboard-showing` on `ion-app` | `@State`, `newSpecPage` | `:host-context()` in Angular, `ViewEncapsulation` |
-| 5 | CSS Architecture: `:host-context()` | Shadow DOM, CSS-over-JS | — |
+| 5 | CSS Architecture: `:host-context()` | Shadow DOM, CSS-over-JS, performance | — |
 | 6 | Why `aria-hidden` Was There | CSS containment, AT tree, shadow DOM edge cases | — |
-| 7 | Deprecating APIs the Right Way | `printIonWarning`, `classList.toggle` | — |
-| 8 | Testing: Spec, E2E, and the Gaps | jsdom limits, axe-core, Playwright | — |
+| 7 | Deprecating APIs the Right Way | `printIonWarning`, `classList.toggle`, `@State` when not to use it | — |
+| 8 | Writing the E2E Tests | Playwright, `page.evaluate`, `:host-context()` in real Chromium | — |
 | 9 | The PR Process | Conventional commits, fork, review | Angular wrapper layer, follow-up PRs |
-| 10 | Angular Patterns Across the Series (Bonus) | Synthesis | `IonTabs`, Signals, Zone.js, GDE path |
+| 10 | Angular Patterns Across the Series (Bonus) | Synthesis | `@HostListener`, Signals, `async` pipe, Zone.js, GDE path |
 

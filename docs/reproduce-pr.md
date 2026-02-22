@@ -239,6 +239,68 @@ npm run lint.ts && npm run lint.sass
 
 ---
 
+## Commit 5 — `test(app,tab-bar): add e2e tests for keyboard-showing and CSS hiding`
+
+**Files changed:**
+- `core/src/components/app/test/keyboard/app.e2e.ts`
+- `core/src/components/tab-bar/test/keyboard/tab-bar.e2e.ts`
+
+**What to do:**
+
+### 5a. Why e2e (not more spec tests)
+
+The two behaviors we're adding e2e tests for can't be validated in jsdom (the spec test environment):
+- Whether the `keyboard-showing` class actually appears on the rendered `ion-app` element in a real browser
+- Whether the `:host-context()` CSS rule makes `ion-tab-bar` `display: none` — jsdom doesn't render CSS, so spec tests can't verify this
+- Whether the `slot="top"` exception works — jsdom has known quirks with the `slot` attribute
+
+### 5b. Create `app/test/keyboard/app.e2e.ts`
+
+```ts
+configs({ modes: ['ios'], directions: ['ltr'] }).forEach(({ title, config }) => {
+  test.describe(title('app: keyboard'), () => {
+    test('should add keyboard-showing class when keyboard opens', async ({ page }) => {
+      await page.setContent(`<ion-app></ion-app>`, config);
+      const ionApp = page.locator('ion-app');
+      await expect(ionApp).not.toHaveClass(/keyboard-showing/);
+      await page.evaluate(() => window.dispatchEvent(new Event('keyboardWillShow')));
+      await page.waitForChanges();
+      await expect(ionApp).toHaveClass(/keyboard-showing/);
+    });
+    // ... and the remove test
+  });
+});
+```
+
+Key APIs:
+- `page.evaluate(fn)` — runs `fn` in the browser context (not Node.js). This is how you dispatch the native-equivalent keyboard events.
+- `page.waitForChanges()` — waits for Stencil to process the state change and re-render.
+- `expect(locator).toHaveClass(/regex/)` — matches against any class in the class list.
+
+### 5c. Create `tab-bar/test/keyboard/tab-bar.e2e.ts`
+
+Four tests:
+1. `should hide via CSS when keyboard opens` — `toBeHidden()` after `keyboardWillShow`
+2. `should show again when keyboard closes` — `toBeVisible()` after `keyboardWillHide`
+3. `should not hide when slot="top"` — `toBeVisible()` even after `keyboardWillShow` (the test that couldn't be written as a spec test)
+4. `@deprecated` — `should still set deprecated tab-bar-hidden class` — `toHaveClass(/tab-bar-hidden/)` (remove in next major version)
+
+Why `toBeHidden()` works for the `:host-context()` test: Playwright checks computed CSS visibility. When the shadow DOM rule applies `display: none` to the `:host` element, the `ion-tab-bar` element's computed `display` is `none` from the light DOM. Playwright can see this — which is exactly what makes this test valuable.
+
+### 5d. Verify the TypeScript compiles
+
+```bash
+cd core && npm run lint.ts
+```
+
+> **Note on running the e2e tests locally:** E2E tests run against the built `dist/` files (not TypeScript source). You need `npm run build` first, then a Playwright-compatible browser. The CI handles this automatically. For local runs:
+> ```bash
+> npm run build
+> npx playwright test --grep "keyboard" --project=chromium
+> ```
+
+---
+
 ## Summary of commits
 
 | # | Message | Files |
@@ -247,18 +309,15 @@ npm run lint.ts && npm run lint.sass
 | 2 | `feat(tab-bar): move keyboard hiding to CSS :host-context()` | `tab-bar.scss`, `tab-bar.tsx` |
 | 3 | `fix(tab-bar): restore tab-bar-hidden emission for proper deprecation period` | `tab-bar.tsx`, `tab-bar.spec.ts` |
 | 4 | `feat(tab-bar): add deprecation warning for tab-bar-hidden class` | `tab-bar.tsx`, `tab-bar.spec.ts` |
+| 5 | `test(app,tab-bar): add e2e tests for keyboard-showing and CSS hiding` | `app/test/keyboard/app.e2e.ts`, `tab-bar/test/keyboard/tab-bar.e2e.ts` |
 
 ---
 
 ## Known testing gaps
 
-These items were not covered by the spec tests written in this guide. A complete PR to the upstream `ionic-team` repository would ideally include:
+The e2e tests in commit 5 cover the CSS and class behavior. What's still not covered:
 
-1. **E2E test for `:host-context()` CSS.** The rule that visually hides `ion-tab-bar` when `ion-app.keyboard-showing` is set is not tested in a real browser. A Playwright e2e test in `core/src/components/tab-bar/test/` would verify the CSS rule works correctly.
-
-2. **E2E accessibility test.** The existing `tab-button.e2e.ts` uses axe-core to verify no accessibility violations. A similar test on a page that includes `ion-tab-bar` with keyboard-triggered hide/show behavior would verify that `display: none` properly removes the element from the AT tree — especially given the `contain: strict` CSS that `ion-tab-bar` uses.
-
-3. **The `slot="top"` case.** The spec test for a top-slotted tab bar was omitted because jsdom doesn't handle the `slot` attribute during keyboard callbacks the same way a real browser does. This is a Playwright e2e candidate.
+1. **Accessibility e2e.** The existing `tab-button.e2e.ts` uses axe-core to verify no accessibility violations. A similar test with a keyboard-hidden `ion-tab-bar` would confirm `display: none` properly removes the element from the AT tree in a real browser. This is worth adding if the PR receives feedback about accessibility coverage.
 
 ---
 
