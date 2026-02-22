@@ -1,7 +1,9 @@
 import type { ComponentInterface } from '@stencil/core';
-import { Build, Component, Element, Host, Method, h } from '@stencil/core';
+import { Build, Component, Element, Host, Method, State, h } from '@stencil/core';
 import type { FocusVisibleUtility } from '@utils/focus-visible';
 import { shouldUseCloseWatcher } from '@utils/hardware-back-button';
+import type { KeyboardController } from '@utils/keyboard/keyboard-controller';
+import { createKeyboardController } from '@utils/keyboard/keyboard-controller';
 import { printIonWarning } from '@utils/logging';
 import { isPlatform } from '@utils/platform';
 
@@ -15,8 +17,43 @@ import { getIonMode } from '../../global/ionic-global';
 export class App implements ComponentInterface {
   private focusVisible?: FocusVisibleUtility;
   private loadTimeout?: ReturnType<typeof setTimeout> | undefined;
+  private keyboardCtrl: KeyboardController | null = null;
+  private keyboardCtrlPromise: Promise<KeyboardController> | null = null;
 
   @Element() el!: HTMLElement;
+
+  @State() keyboardVisible = false;
+
+  async connectedCallback() {
+    const promise = createKeyboardController(async (keyboardOpen, waitForResize) => {
+      /**
+       * If the keyboard is hiding, then we need to wait
+       * for the webview to resize. Otherwise, content relying
+       * on the keyboard-showing class will reflow before
+       * the webview resizes.
+       */
+      if (keyboardOpen === false && waitForResize !== undefined) {
+        await waitForResize;
+      }
+
+      this.keyboardVisible = keyboardOpen; // trigger re-render by updating state
+    });
+    this.keyboardCtrlPromise = promise;
+
+    const keyboardCtrl = await promise;
+
+    /**
+     * Only assign if this is still the current promise.
+     * Otherwise, a new connectedCallback has started or
+     * disconnectedCallback was called, so destroy this instance.
+     */
+    if (this.keyboardCtrlPromise === promise) {
+      this.keyboardCtrl = keyboardCtrl;
+      this.keyboardCtrlPromise = null;
+    } else {
+      keyboardCtrl.destroy();
+    }
+  }
 
   componentDidLoad() {
     if (Build.isBrowser) {
@@ -65,6 +102,16 @@ export class App implements ComponentInterface {
     if (this.loadTimeout) {
       clearTimeout(this.loadTimeout);
     }
+
+    if (this.keyboardCtrlPromise) {
+      this.keyboardCtrlPromise.then((ctrl) => ctrl.destroy());
+      this.keyboardCtrlPromise = null;
+    }
+
+    if (this.keyboardCtrl) {
+      this.keyboardCtrl.destroy();
+      this.keyboardCtrl = null;
+    }
   }
 
   /**
@@ -101,6 +148,7 @@ export class App implements ComponentInterface {
           [mode]: true,
           'ion-page': true,
           'force-statusbar-padding': config.getBoolean('_forceStatusbarPadding'),
+          'keyboard-showing': this.keyboardVisible,
         }}
       ></Host>
     );

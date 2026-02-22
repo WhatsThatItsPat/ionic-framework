@@ -1,7 +1,8 @@
 import type { ComponentInterface, EventEmitter } from '@stencil/core';
-import { Component, Element, Event, Host, Prop, State, Watch, h } from '@stencil/core';
+import { Component, Element, Event, Host, Prop, Watch, h } from '@stencil/core';
 import type { KeyboardController } from '@utils/keyboard/keyboard-controller';
 import { createKeyboardController } from '@utils/keyboard/keyboard-controller';
+import { printIonWarning } from '@utils/logging';
 import { createColorClasses } from '@utils/theme';
 
 import { getIonMode } from '../../global/ionic-global';
@@ -24,10 +25,13 @@ export class TabBar implements ComponentInterface {
   private keyboardCtrl: KeyboardController | null = null;
   private keyboardCtrlPromise: Promise<KeyboardController> | null = null;
   private didLoad = false;
+  /**
+   * Tracks whether the deprecation warning for `tab-bar-hidden` has been
+   * issued yet. The warning fires at most once per component instance.
+   */
+  private hasWarnedDeprecation = false;
 
   @Element() el!: HTMLElement;
-
-  @State() keyboardVisible = false;
 
   /**
    * The color to use from your application's color palette.
@@ -99,7 +103,22 @@ export class TabBar implements ComponentInterface {
         await waitForResize;
       }
 
-      this.keyboardVisible = keyboardOpen; // trigger re-render by updating state
+      /**
+       * @deprecated - `tab-bar-hidden` is deprecated. The tab bar is now hidden
+       * via the `:host-context(ion-app.keyboard-showing)` CSS selector.
+       * This class is kept for backward compatibility and will be removed in a
+       * future major version of Ionic.
+       */
+      const shouldHide = keyboardOpen && this.el.getAttribute('slot') !== 'top';
+      if (shouldHide && !this.hasWarnedDeprecation) {
+        printIonWarning(
+          '[ion-tab-bar] - The `tab-bar-hidden` class is deprecated and will be removed in a future major version of Ionic. ' +
+            'Use `ion-app.keyboard-showing` instead to respond to keyboard visibility changes.',
+          this.el
+        );
+        this.hasWarnedDeprecation = true;
+      }
+      this.el.classList.toggle('tab-bar-hidden', shouldHide);
     });
     this.keyboardCtrlPromise = promise;
 
@@ -131,18 +150,15 @@ export class TabBar implements ComponentInterface {
   }
 
   render() {
-    const { color, translucent, keyboardVisible } = this;
+    const { color, translucent } = this;
     const mode = getIonMode(this);
-    const shouldHide = keyboardVisible && this.el.getAttribute('slot') !== 'top';
 
     return (
       <Host
         role="tablist"
-        aria-hidden={shouldHide ? 'true' : null}
         class={createColorClasses(color, {
           [mode]: true,
           'tab-bar-translucent': translucent,
-          'tab-bar-hidden': shouldHide,
         })}
       >
         <slot></slot>
