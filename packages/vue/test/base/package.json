@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "@vue/test-utils": "^2.4.6",
-    "jsdom": "^28.1.0"
-  }
-}
