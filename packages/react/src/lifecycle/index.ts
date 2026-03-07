@@ -4,5 +4,5 @@ export {
   useIonViewDidLeave,
   useIonViewWillEnter,
   useIonViewWillLeave,
-  useIonTabRootClick,
+  useIonTabRootTap,
 } from './hooks';

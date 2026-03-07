@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRouter, createWebHistory } from '@ionic/vue-router';
 import { IonicVue, IonRouterOutlet, IonTabs, IonPage } from '@ionic/vue';
 import { defineComponent } from 'vue';
-import { TAB_ROOT_CLICK } from '@ionic/core/components';
+import { TAB_ROOT_TAP } from '@ionic/core/components';
 import { waitForRouter } from './utils';
 
 const BasePage = {
@@ -212,7 +212,7 @@ describe('Lifecycle Events', () => {
     expect(NonTabPage.ionViewWillLeave).toHaveBeenCalled();
     expect(NonTabPage.ionViewDidLeave).toHaveBeenCalled();
   })
-  it('should fire ionTabRootClick when event is dispatched on page element', async () => {
+  it('should fire ionTabRootTap when event is dispatched on page element', async () => {
     const Tab1Page = {
       ...BasePage,
       data() {
@@ -220,7 +220,7 @@ describe('Lifecycle Events', () => {
           name: 'tab1'
         }
       },
-      ionTabRootClick: vi.fn(),
+      ionTabRootTap: vi.fn(),
     }
 
     const TabsPage = {
@@ -260,22 +260,22 @@ describe('Lifecycle Events', () => {
 
     await waitForRouter();
 
-    // ionTabRootClick should not have been called yet
-    expect(Tab1Page.ionTabRootClick).not.toHaveBeenCalled();
+    // ionTabRootTap should not have been called yet
+    expect(Tab1Page.ionTabRootTap).not.toHaveBeenCalled();
 
     // Find the page element and dispatch the event
     const pageEl = wrapper.find('.ion-page[data-pageid="tab1"]');
     expect(pageEl.exists()).toBe(true);
 
     pageEl.element.dispatchEvent(
-      new CustomEvent(TAB_ROOT_CLICK, {
+      new CustomEvent(TAB_ROOT_TAP, {
         bubbles: false,
         cancelable: false,
         detail: { tab: 'tab1' },
       })
     );
 
-    // ionTabRootClick should now have been called
-    expect(Tab1Page.ionTabRootClick).toHaveBeenCalled();
+    // ionTabRootTap should now have been called
+    expect(Tab1Page.ionTabRootTap).toHaveBeenCalled();
   })
 });

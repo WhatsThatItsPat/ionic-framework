@@ -4,7 +4,7 @@ import {
   LIFECYCLE_DID_LEAVE,
   LIFECYCLE_WILL_ENTER,
   LIFECYCLE_WILL_LEAVE,
-  TAB_ROOT_CLICK,
+  TAB_ROOT_TAP,
 } from "@ionic/core/components";
 import type { Ref, ComponentPublicInstance } from "vue";
 
@@ -13,7 +13,7 @@ type PAGE_EVENTS =
   | typeof LIFECYCLE_DID_ENTER
   | typeof LIFECYCLE_WILL_LEAVE
   | typeof LIFECYCLE_DID_LEAVE
-  | typeof TAB_ROOT_CLICK;
+  | typeof TAB_ROOT_TAP;
 
 // TODO(FW-2969): types
 
@@ -22,14 +22,14 @@ export enum LifecycleHooks {
   DidEnter = "onIonViewDidEnter",
   WillLeave = "onIonViewWillLeave",
   DidLeave = "onIonViewDidLeave",
-  TabRootClick = "onIonTabRootClick",
+  TabRootTap = "onIonTabRootTap",
 }
 const hookNames: Record<string, LifecycleHooks> = {
   [LIFECYCLE_WILL_ENTER]: LifecycleHooks.WillEnter,
   [LIFECYCLE_DID_ENTER]: LifecycleHooks.DidEnter,
   [LIFECYCLE_WILL_LEAVE]: LifecycleHooks.WillLeave,
   [LIFECYCLE_DID_LEAVE]: LifecycleHooks.DidLeave,
-  [TAB_ROOT_CLICK]: LifecycleHooks.TabRootClick,
+  [TAB_ROOT_TAP]: LifecycleHooks.TabRootTap,
 };
 
 const ids: { [k: string]: number } = { main: 0 };

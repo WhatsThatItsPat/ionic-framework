@@ -11,11 +11,27 @@ import {
   QueryList,
 } from '@angular/core';
 
-import { TAB_ROOT_CLICK } from '@ionic/core/components';
+import { TAB_ROOT_TAP } from '@ionic/core/components';
 
 import { NavController } from '../../providers/nav-controller';
 
 import { StackDidChangeEvent, StackWillChangeEvent } from './stack-utils';
+
+/**
+ * Dispatches the ionTabRootTap event on the given element.
+ * This event is fired when the user taps the active tab button
+ * while already at the root page of that tab's navigation stack,
+ * allowing the page to respond (e.g. scroll to top, refresh).
+ */
+const dispatchTabRootTap = (element: HTMLElement, tab: string) => {
+  element.dispatchEvent(
+    new CustomEvent(TAB_ROOT_TAP, {
+      bubbles: false,
+      cancelable: false,
+      detail: { tab },
+    })
+  );
+};
 
 @Directive({
   selector: 'ion-tabs',
@@ -130,20 +146,14 @@ export abstract class IonTabs implements AfterViewInit, AfterContentInit, AfterC
      */
     if (this.hasTab) {
       /**
-       * If the same tab is already selected and clicked again,
-       * dispatch the ionTabRootClick event on the tab element
+       * If the same tab is already selected and tapped again,
+       * dispatch the ionTabRootTap event on the tab element
        * so the page can respond (e.g. scroll to top, refresh).
        */
       if (this.selectedTab?.tab === tab) {
         const selectedTab = this.tabs.find((t: any) => t.tab === tab);
         if (selectedTab?.el) {
-          selectedTab.el.dispatchEvent(
-            new CustomEvent(TAB_ROOT_CLICK, {
-              bubbles: false,
-              cancelable: false,
-              detail: { tab },
-            })
-          );
+          dispatchTabRootTap(selectedTab.el, tab);
         }
         return;
       }
@@ -174,13 +184,7 @@ export abstract class IonTabs implements AfterViewInit, AfterContentInit, AfterC
       // If on root tab, do not navigate to root tab again
       if (activeView?.url === tabRootUrl) {
         if (activeView?.element) {
-          activeView.element.dispatchEvent(
-            new CustomEvent(TAB_ROOT_CLICK, {
-              bubbles: false,
-              cancelable: false,
-              detail: { tab },
-            })
-          );
+          dispatchTabRootTap(activeView.element, tab);
         }
         return;
       }

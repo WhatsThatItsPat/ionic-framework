@@ -1,4 +1,4 @@
-import { TAB_ROOT_CLICK } from '@ionic/core/components';
+import { TAB_ROOT_TAP } from '@ionic/core/components';
 import React from 'react';
 
 import { mergeRefs } from '../components/react-component-lib/utils';
@@ -35,7 +35,7 @@ export class PageManager extends React.PureComponent<PageManagerProps> {
     this.ionViewDidEnterHandler = this.ionViewDidEnterHandler.bind(this);
     this.ionViewWillLeaveHandler = this.ionViewWillLeaveHandler.bind(this);
     this.ionViewDidLeaveHandler = this.ionViewDidLeaveHandler.bind(this);
-    this.ionTabRootClickHandler = this.ionTabRootClickHandler.bind(this);
+    this.ionTabRootTapHandler = this.ionTabRootTapHandler.bind(this);
   }
 
   componentDidMount() {
@@ -48,7 +48,7 @@ export class PageManager extends React.PureComponent<PageManagerProps> {
       this.ionPageElementRef.current.addEventListener('ionViewDidEnter', this.ionViewDidEnterHandler);
       this.ionPageElementRef.current.addEventListener('ionViewWillLeave', this.ionViewWillLeaveHandler);
       this.ionPageElementRef.current.addEventListener('ionViewDidLeave', this.ionViewDidLeaveHandler);
-      this.ionPageElementRef.current.addEventListener(TAB_ROOT_CLICK, this.ionTabRootClickHandler);
+      this.ionPageElementRef.current.addEventListener(TAB_ROOT_TAP, this.ionTabRootTapHandler);
     }
   }
 
@@ -57,7 +57,7 @@ export class PageManager extends React.PureComponent<PageManagerProps> {
       this.ionPageElementRef.current.removeEventListener('ionViewWillEnter', this.ionViewWillEnterHandler);
       this.ionPageElementRef.current.removeEventListener('ionViewDidEnter', this.ionViewDidEnterHandler);
       this.ionPageElementRef.current.removeEventListener('ionViewWillLeave', this.ionViewWillLeaveHandler);
-      this.ionPageElementRef.current.removeEventListener(TAB_ROOT_CLICK, this.ionTabRootClickHandler);
+      this.ionPageElementRef.current.removeEventListener(TAB_ROOT_TAP, this.ionTabRootTapHandler);
       /**
        * We deliberately do not remove the `ionViewDidLeave` listener.
        * The registered callback is used to unmount and remove the page.
@@ -84,8 +84,8 @@ export class PageManager extends React.PureComponent<PageManagerProps> {
     this.ionLifeCycleContext.ionViewDidLeave();
   }
 
-  ionTabRootClickHandler() {
-    this.ionLifeCycleContext.ionTabRootClick();
+  ionTabRootTapHandler() {
+    this.ionLifeCycleContext.ionTabRootTap();
   }
 
   render() {

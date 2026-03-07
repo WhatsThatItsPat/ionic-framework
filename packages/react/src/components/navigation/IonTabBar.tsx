@@ -1,5 +1,5 @@
 import type { JSX as LocalJSX } from '@ionic/core/components';
-import { TAB_ROOT_CLICK } from '@ionic/core/components';
+import { TAB_ROOT_TAP } from '@ionic/core/components';
 import React, { useContext } from 'react';
 
 import { NavContext } from '../../contexts/NavContext';
@@ -226,13 +226,13 @@ class IonTabBarUnwrapped extends React.PureComponent<InternalProps, IonTabBarSta
       } else if (hasRouterOutlet) {
         /**
          * If the tab is already at its root page, dispatch the
-         * ionTabRootClick event on the active page element so
+         * ionTabRootTap event on the active page element so
          * the page can respond (e.g. scroll to top, refresh).
          */
         const activePage = this.findActivePageElement(e);
         if (activePage) {
           activePage.dispatchEvent(
-            new CustomEvent(TAB_ROOT_CLICK, {
+            new CustomEvent(TAB_ROOT_TAP, {
               bubbles: false,
               cancelable: false,
               detail: { tab: e.detail.tab },

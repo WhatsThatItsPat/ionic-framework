@@ -55,15 +55,15 @@ export const useIonViewDidLeave = (callback: LifeCycleCallback, deps: any[] = []
   }, deps);
 };
 
-export const useIonTabRootClick = (callback: LifeCycleCallback, deps: any[] = []) => {
+export const useIonTabRootTap = (callback: LifeCycleCallback, deps: any[] = []) => {
   const context = useContext(IonLifeCycleContext);
   const id = useRef<number | undefined>();
   id.current = id.current || Math.floor(Math.random() * 1000000);
   useEffect(() => {
     callback.id = id.current!;
-    context.onIonTabRootClick(callback);
+    context.onIonTabRootTap(callback);
     return () => {
-      context.cleanupIonTabRootClick(callback);
+      context.cleanupIonTabRootTap(callback);
     };
   }, deps);
 };

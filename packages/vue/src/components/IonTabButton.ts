@@ -1,5 +1,4 @@
 import { defineCustomElement } from "@ionic/core/components/ion-tab-button.js";
-import { TAB_ROOT_CLICK } from "@ionic/core/components";
 import { h, defineComponent, inject } from "vue";
 
 export const IonTabButton = /*@__PURE__*/ defineComponent({
@@ -20,6 +19,10 @@ export const IonTabButton = /*@__PURE__*/ defineComponent({
     tab: String,
     target: String,
     _onClick: {
+      type: Function,
+      required: false,
+    },
+    _onTabRootTap: {
       type: Function,
       required: false,
     },
@@ -77,28 +80,8 @@ export const IonTabButton = /*@__PURE__*/ defineComponent({
         if (prevActiveTab === tab) {
           if (originalHref !== currentHref) {
             ionRouter.resetTab(tab);
-          } else {
-            /**
-             * If the tab is already at its root page, dispatch the
-             * ionTabRootClick event on the active page element so
-             * the page can respond (e.g. scroll to top, refresh).
-             */
-            const tabsEl = ev.target
-              ? (ev.target as HTMLElement).closest("ion-tabs")
-              : null;
-            const outlet = tabsEl?.querySelector("ion-router-outlet");
-            const activePage = outlet?.querySelector(
-              ":scope > .ion-page:not(.ion-page-hidden)"
-            );
-            if (activePage) {
-              activePage.dispatchEvent(
-                new CustomEvent(TAB_ROOT_CLICK, {
-                  bubbles: false,
-                  cancelable: false,
-                  detail: { tab },
-                })
-              );
-            }
+          } else if (props._onTabRootTap) {
+            props._onTabRootTap(tab);
           }
         } else {
           ionRouter.changeTab(tab, currentHref);

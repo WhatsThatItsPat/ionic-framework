@@ -1,4 +1,4 @@
-import { componentOnReady, TAB_ROOT_CLICK } from '@ionic/core/components';
+import { componentOnReady, TAB_ROOT_TAP } from '@ionic/core/components';
 import React from 'react';
 
 import { IonRouterOutletInner } from '../components/inner-proxies';
@@ -35,7 +35,7 @@ export class OutletPageManager extends React.Component<OutletPageManagerProps> {
     this.ionViewDidEnterHandler = this.ionViewDidEnterHandler.bind(this);
     this.ionViewWillLeaveHandler = this.ionViewWillLeaveHandler.bind(this);
     this.ionViewDidLeaveHandler = this.ionViewDidLeaveHandler.bind(this);
-    this.ionTabRootClickHandler = this.ionTabRootClickHandler.bind(this);
+    this.ionTabRootTapHandler = this.ionTabRootTapHandler.bind(this);
   }
 
   componentDidMount() {
@@ -55,7 +55,7 @@ export class OutletPageManager extends React.Component<OutletPageManagerProps> {
       this.ionRouterOutlet.addEventListener('ionViewDidEnter', this.ionViewDidEnterHandler);
       this.ionRouterOutlet.addEventListener('ionViewWillLeave', this.ionViewWillLeaveHandler);
       this.ionRouterOutlet.addEventListener('ionViewDidLeave', this.ionViewDidLeaveHandler);
-      this.ionRouterOutlet.addEventListener(TAB_ROOT_CLICK, this.ionTabRootClickHandler);
+      this.ionRouterOutlet.addEventListener(TAB_ROOT_TAP, this.ionTabRootTapHandler);
     }
   }
 
@@ -65,7 +65,7 @@ export class OutletPageManager extends React.Component<OutletPageManagerProps> {
       this.ionRouterOutlet.removeEventListener('ionViewDidEnter', this.ionViewDidEnterHandler);
       this.ionRouterOutlet.removeEventListener('ionViewWillLeave', this.ionViewWillLeaveHandler);
       this.ionRouterOutlet.removeEventListener('ionViewDidLeave', this.ionViewDidLeaveHandler);
-      this.ionRouterOutlet.removeEventListener(TAB_ROOT_CLICK, this.ionTabRootClickHandler);
+      this.ionRouterOutlet.removeEventListener(TAB_ROOT_TAP, this.ionTabRootTapHandler);
     }
   }
 
@@ -85,8 +85,8 @@ export class OutletPageManager extends React.Component<OutletPageManagerProps> {
     this.ionLifeCycleContext.ionViewDidLeave();
   }
 
-  ionTabRootClickHandler() {
-    this.ionLifeCycleContext.ionTabRootClick();
+  ionTabRootTapHandler() {
+    this.ionLifeCycleContext.ionTabRootTap();
   }
 
   render() {

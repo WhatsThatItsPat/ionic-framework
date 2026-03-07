@@ -4,7 +4,7 @@ import {
   LIFECYCLE_DID_LEAVE,
   LIFECYCLE_WILL_ENTER,
   LIFECYCLE_WILL_LEAVE,
-  TAB_ROOT_CLICK,
+  TAB_ROOT_TAP,
 } from "@ionic/core/components";
 import { defineCustomElement } from "@ionic/core/components/ion-router-outlet.js";
 import {
@@ -509,16 +509,16 @@ See https://ionicframework.com/docs/vue/navigation#ionpage for more information.
       viewStacks.registerIonPage(viewItem, ionPageEl);
 
       /**
-       * Listen for the ionTabRootClick event on the page element.
-       * This event is dispatched when the active tab button is clicked
+       * Listen for the ionTabRootTap event on the page element.
+       * This event is dispatched when the active tab button is tapped
        * while already at the root page of that tab's stack.
        * We bridge this DOM event to the Vue lifecycle hook system.
        */
-      ionPageEl.addEventListener(TAB_ROOT_CLICK, () => {
+      ionPageEl.addEventListener(TAB_ROOT_TAP, () => {
         fireLifecycle(
           viewItem.vueComponent,
           viewItem.vueComponentRef,
-          TAB_ROOT_CLICK
+          TAB_ROOT_TAP
         );
       });
 

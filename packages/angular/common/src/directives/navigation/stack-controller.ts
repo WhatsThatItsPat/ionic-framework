@@ -3,7 +3,7 @@ import { ComponentRef, NgZone } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import type { AnimationBuilder, RouterDirection } from '@ionic/core/components';
 
-import { bindLifecycleEvents } from '../../providers/angular-delegate';
+import { bindPageEvents } from '../../providers/angular-delegate';
 import { NavController } from '../../providers/nav-controller';
 
 import {
@@ -41,7 +41,7 @@ export class StackController {
   createView(ref: ComponentRef<any>, activatedRoute: ActivatedRoute): RouteView {
     const url = getUrl(this.router, activatedRoute);
     const element = ref?.location?.nativeElement as HTMLElement;
-    const unlistenEvents = bindLifecycleEvents(this.zone, ref.instance, element);
+    const unlistenEvents = bindPageEvents(this.zone, ref.instance, element);
     return {
       id: this.nextId++,
       stackId: computeStackId(this.tabsPrefix, url),

@@ -1,4 +1,5 @@
 import { defineCustomElement } from "@ionic/core/components/ion-tab-bar.js";
+import { TAB_ROOT_TAP } from "@ionic/core/components";
 import type { VNode, Ref } from "vue";
 import { h, defineComponent, getCurrentInstance, inject } from "vue";
 
@@ -107,6 +108,16 @@ export const IonTabBar = defineComponent({
          * ion-tab-bar is managing for it.
          */
         child.component.props._getTabState = () => tabState;
+
+        /**
+         * When the active tab button is tapped while already
+         * at the root page, dispatch the ionTabRootTap event
+         * on the active page element so the page can respond
+         * (e.g. scroll to top, refresh).
+         */
+        child.component.props._onTabRootTap = (tab: string) => {
+          this.dispatchTabRootTap(tab);
+        };
 
         /**
          * If the router outlet is not defined, then the tabs are being used
@@ -235,6 +246,29 @@ export const IonTabBar = defineComponent({
       const activeTab = event.detail.tab;
 
       this.tabSwitch(activeTab);
+    },
+    /**
+     * Dispatches the ionTabRootTap event on the active page element
+     * inside the ion-router-outlet. This is called when the active
+     * tab button is tapped while already at the root page of that
+     * tab's navigation stack.
+     */
+    dispatchTabRootTap(tab: string) {
+      const tabBar = this.$refs.ionTabBar as HTMLElement | undefined;
+      const tabsEl = tabBar?.closest("ion-tabs");
+      const outlet = tabsEl?.querySelector("ion-router-outlet");
+      const activePage = outlet?.querySelector(
+        ":scope > .ion-page:not(.ion-page-hidden)"
+      );
+      if (activePage) {
+        activePage.dispatchEvent(
+          new CustomEvent(TAB_ROOT_TAP, {
+            bubbles: false,
+            cancelable: false,
+            detail: { tab },
+          })
+        );
+      }
     },
     tabSwitch(activeTab: string, ionRouter?: any) {
       const hasRouterOutlet = this.$data.tabState.hasRouterOutlet;
