@@ -23,7 +23,7 @@ import { StackDidChangeEvent, StackWillChangeEvent } from './stack-utils';
  * while already at the root page of that tab's navigation stack,
  * allowing the page to respond (e.g. scroll to top, refresh).
  */
-const dispatchTabRootTap = (element: HTMLElement, tab: string) => {
+function dispatchTabRootTap(element: HTMLElement, tab: string) {
   element.dispatchEvent(
     new CustomEvent(TAB_ROOT_TAP, {
       bubbles: false,
@@ -31,7 +31,7 @@ const dispatchTabRootTap = (element: HTMLElement, tab: string) => {
       detail: { tab },
     })
   );
-};
+}
 
 @Directive({
   selector: 'ion-tabs',

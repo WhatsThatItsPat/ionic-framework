@@ -9,18 +9,10 @@ export interface IonLifeCycleContextInterface {
   ionViewWillLeave: () => void;
   onIonViewDidLeave: (callback: () => void) => void;
   ionViewDidLeave: () => void;
-  /**
-   * ionTabRootTap is not a lifecycle event, but it is grouped with
-   * lifecycle events because it uses the same callback mechanism
-   * to communicate from the page element to the component.
-   */
-  onIonTabRootTap: (callback: () => void) => void;
-  ionTabRootTap: () => void;
   cleanupIonViewWillEnter: (callback: () => void) => void;
   cleanupIonViewDidEnter: (callback: () => void) => void;
   cleanupIonViewWillLeave: (callback: () => void) => void;
   cleanupIonViewDidLeave: (callback: () => void) => void;
-  cleanupIonTabRootTap: (callback: () => void) => void;
 }
 
 export const IonLifeCycleContext = /*@__PURE__*/ React.createContext<IonLifeCycleContextInterface>({
@@ -48,12 +40,6 @@ export const IonLifeCycleContext = /*@__PURE__*/ React.createContext<IonLifeCycl
   ionViewDidLeave: () => {
     return;
   },
-  onIonTabRootTap: () => {
-    return;
-  },
-  ionTabRootTap: () => {
-    return;
-  },
   cleanupIonViewWillEnter: () => {
     return;
   },
@@ -64,9 +50,6 @@ export const IonLifeCycleContext = /*@__PURE__*/ React.createContext<IonLifeCycl
     return;
   },
   cleanupIonViewDidLeave: () => {
-    return;
-  },
-  cleanupIonTabRootTap: () => {
     return;
   },
 });
@@ -86,13 +69,11 @@ export const DefaultIonLifeCycleContext = class implements IonLifeCycleContextIn
   ionViewDidEnterCallbacks: LifeCycleCallback[] = [];
   ionViewWillLeaveCallbacks: LifeCycleCallback[] = [];
   ionViewDidLeaveCallbacks: LifeCycleCallback[] = [];
-  ionTabRootTapCallbacks: LifeCycleCallback[] = [];
   componentCanBeDestroyedCallback?: () => void;
   ionViewWillEnterDestructorCallbacks: LifeCycleDestructor[] = [];
   ionViewDidEnterDestructorCallbacks: LifeCycleDestructor[] = [];
   ionViewWillLeaveDestructorCallbacks: LifeCycleDestructor[] = [];
   ionViewDidLeaveDestructorCallbacks: LifeCycleDestructor[] = [];
-  ionTabRootTapDestructorCallbacks: LifeCycleDestructor[] = [];
 
   onIonViewWillEnter(callback: LifeCycleCallback) {
     if (callback.id) {
@@ -232,37 +213,6 @@ export const DefaultIonLifeCycleContext = class implements IonLifeCycleContextIn
       }
     });
     this.componentCanBeDestroyed();
-  }
-
-  onIonTabRootTap(callback: LifeCycleCallback) {
-    if (callback.id) {
-      const index = this.ionTabRootTapCallbacks.findIndex((x) => x.id === callback.id);
-      if (index > -1) {
-        this.ionTabRootTapCallbacks[index] = callback;
-      } else {
-        this.ionTabRootTapCallbacks.push(callback);
-      }
-    } else {
-      this.ionTabRootTapCallbacks.push(callback);
-    }
-  }
-
-  ionTabRootTap() {
-    this.ionTabRootTapCallbacks.forEach((cb) => {
-      const destructor = cb();
-      if (cb.id) {
-        this.ionTabRootTapDestructorCallbacks.push({ id: cb.id, destructor });
-      }
-    });
-  }
-
-  /**
-   * Tears down the user-provided ionTabRootTap callback.
-   * This is the same behavior as React's useEffect hook. The callback
-   * is invoked when the component is unmounted.
-   */
-  cleanupIonTabRootTap(callback: LifeCycleCallback) {
-    this.teardownCallback(callback, this.ionTabRootTapDestructorCallbacks);
   }
 
   onComponentCanBeDestroyed(callback: () => void) {
