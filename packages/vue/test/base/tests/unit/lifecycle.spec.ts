@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRouter, createWebHistory } from '@ionic/vue-router';
 import { IonicVue, IonRouterOutlet, IonTabs, IonPage } from '@ionic/vue';
 import { defineComponent } from 'vue';
+import { TAB_ROOT_CLICK } from '@ionic/core/components';
 import { waitForRouter } from './utils';
 
 const BasePage = {
@@ -210,5 +211,71 @@ describe('Lifecycle Events', () => {
 
     expect(NonTabPage.ionViewWillLeave).toHaveBeenCalled();
     expect(NonTabPage.ionViewDidLeave).toHaveBeenCalled();
+  })
+  it('should fire ionTabRootClick when event is dispatched on page element', async () => {
+    const Tab1Page = {
+      ...BasePage,
+      data() {
+        return {
+          name: 'tab1'
+        }
+      },
+      ionTabRootClick: vi.fn(),
+    }
+
+    const TabsPage = {
+      template: `
+        <ion-page>
+          <ion-tabs>
+            <IonRouterOutlet />
+          </ion-tabs>
+        </ion-page>
+      `,
+      components: { IonPage, IonTabs, IonRouterOutlet },
+    }
+
+    const router = createRouter({
+      history: createWebHistory(process.env.BASE_URL),
+      routes: [
+        {
+          path: '/',
+          component: TabsPage,
+          children: [
+            {
+              path: 'tab1',
+              component: Tab1Page,
+            },
+          ]
+        },
+      ]
+    });
+
+    router.push('/tab1');
+    await router.isReady();
+    const wrapper = mount(IonRouterOutlet, {
+      global: {
+        plugins: [router, IonicVue]
+      }
+    });
+
+    await waitForRouter();
+
+    // ionTabRootClick should not have been called yet
+    expect(Tab1Page.ionTabRootClick).not.toHaveBeenCalled();
+
+    // Find the page element and dispatch the event
+    const pageEl = wrapper.find('.ion-page[data-pageid="tab1"]');
+    expect(pageEl.exists()).toBe(true);
+
+    pageEl.element.dispatchEvent(
+      new CustomEvent(TAB_ROOT_CLICK, {
+        bubbles: false,
+        cancelable: false,
+        detail: { tab: 'tab1' },
+      })
+    );
+
+    // ionTabRootClick should now have been called
+    expect(Tab1Page.ionTabRootClick).toHaveBeenCalled();
   })
 });
