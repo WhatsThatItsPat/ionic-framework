@@ -19,6 +19,7 @@ export {
   LIFECYCLE_WILL_LEAVE,
   LIFECYCLE_DID_LEAVE,
   LIFECYCLE_WILL_UNLOAD,
+  TAB_ROOT_CLICK,
 } from './components/nav/constants';
 export { menuController } from './utils/menu-controller';
 export {

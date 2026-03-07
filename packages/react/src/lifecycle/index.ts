@@ -1,2 +1,8 @@
 export { withIonLifeCycle } from './IonLifeCycleHOC';
-export { useIonViewDidEnter, useIonViewDidLeave, useIonViewWillEnter, useIonViewWillLeave } from './hooks';
+export {
+  useIonViewDidEnter,
+  useIonViewDidLeave,
+  useIonViewWillEnter,
+  useIonViewWillLeave,
+  useIonTabRootClick,
+} from './hooks';

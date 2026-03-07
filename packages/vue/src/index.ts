@@ -7,6 +7,7 @@ export {
   onIonViewDidEnter,
   onIonViewWillLeave,
   onIonViewDidLeave,
+  onIonTabRootClick,
 } from "./hooks/lifecycle";
 export { UseIonRouterResult, useIonRouter } from "./hooks/router";
 

@@ -16,6 +16,7 @@ import {
   LIFECYCLE_WILL_ENTER,
   LIFECYCLE_WILL_LEAVE,
   LIFECYCLE_WILL_UNLOAD,
+  TAB_ROOT_CLICK,
 } from '@ionic/core/components';
 
 import { NavParams } from '../directives/navigation/nav-params';
@@ -246,9 +247,11 @@ const LIFECYCLES = [
   LIFECYCLE_WILL_UNLOAD,
 ];
 
+const PAGE_EVENTS = [...LIFECYCLES, TAB_ROOT_CLICK];
+
 export const bindLifecycleEvents = (zone: NgZone, instance: any, element: HTMLElement): (() => void) => {
   return zone.run(() => {
-    const unregisters = LIFECYCLES.filter((eventName) => typeof instance[eventName] === 'function').map((eventName) => {
+    const unregisters = PAGE_EVENTS.filter((eventName) => typeof instance[eventName] === 'function').map((eventName) => {
       const handler = (ev: any) => instance[eventName](ev.detail);
       element.addEventListener(eventName, handler);
       return () => element.removeEventListener(eventName, handler);

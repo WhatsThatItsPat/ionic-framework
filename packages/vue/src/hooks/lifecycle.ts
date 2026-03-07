@@ -54,3 +54,4 @@ export const onIonViewWillEnter = createHook(LifecycleHooks.WillEnter);
 export const onIonViewDidEnter = createHook(LifecycleHooks.DidEnter);
 export const onIonViewWillLeave = createHook(LifecycleHooks.WillLeave);
 export const onIonViewDidLeave = createHook(LifecycleHooks.DidLeave);
+export const onIonTabRootClick = createHook(LifecycleHooks.TabRootClick);
