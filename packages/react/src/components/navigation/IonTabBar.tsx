@@ -229,7 +229,7 @@ class IonTabBarUnwrapped extends React.PureComponent<InternalProps, IonTabBarSta
          * ionTabRootClick event on the active page element so
          * the page can respond (e.g. scroll to top, refresh).
          */
-        const activePage = this.findActivePageElement();
+        const activePage = this.findActivePageElement(e);
         if (activePage) {
           activePage.dispatchEvent(
             new CustomEvent(TAB_ROOT_CLICK, {
@@ -258,8 +258,9 @@ class IonTabBarUnwrapped extends React.PureComponent<InternalProps, IonTabBarSta
    * Finds the active (visible) page element inside the
    * ion-router-outlet that is within the closest ion-tabs.
    */
-  private findActivePageElement(): HTMLElement | undefined {
-    const tabsEl = document.querySelector('ion-tabs');
+  private findActivePageElement(e: CustomEvent): HTMLElement | undefined {
+    const target = e.target as HTMLElement | null;
+    const tabsEl = target?.closest('ion-tabs');
     if (!tabsEl) return undefined;
     const outlet = tabsEl.querySelector('ion-router-outlet');
     if (!outlet) return undefined;
