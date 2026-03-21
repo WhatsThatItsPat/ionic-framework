@@ -29,3 +29,12 @@ export interface ViewDidLeave {
    */
   ionViewDidLeave(): void;
 }
+
+/**
+ * Not a lifecycle hook, but uses the same auto-binding mechanism.
+ * Fired when the user taps the active tab button while already
+ * at the root page of that tab's navigation stack.
+ */
+export interface TabRootTap {
+  ionTabRootTap(): void;
+}

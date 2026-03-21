@@ -20,6 +20,7 @@ export {
   LIFECYCLE_DID_LEAVE,
   LIFECYCLE_WILL_UNLOAD,
 } from './components/nav/constants';
+export { TAB_ROOT_TAP } from './components/tabs/constants';
 export { menuController } from './utils/menu-controller';
 export {
   alertController,

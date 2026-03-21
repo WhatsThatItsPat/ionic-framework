@@ -4,14 +4,16 @@ import {
   LIFECYCLE_DID_LEAVE,
   LIFECYCLE_WILL_ENTER,
   LIFECYCLE_WILL_LEAVE,
+  TAB_ROOT_TAP,
 } from "@ionic/core/components";
 import type { Ref, ComponentPublicInstance } from "vue";
 
-type LIFECYCLE_EVENTS =
+type PAGE_EVENTS =
   | typeof LIFECYCLE_WILL_ENTER
   | typeof LIFECYCLE_DID_ENTER
   | typeof LIFECYCLE_WILL_LEAVE
-  | typeof LIFECYCLE_DID_LEAVE;
+  | typeof LIFECYCLE_DID_LEAVE
+  | typeof TAB_ROOT_TAP;
 
 // TODO(FW-2969): types
 
@@ -20,12 +22,14 @@ export enum LifecycleHooks {
   DidEnter = "onIonViewDidEnter",
   WillLeave = "onIonViewWillLeave",
   DidLeave = "onIonViewDidLeave",
+  TabRootTap = "onIonTabRootTap",
 }
-const hookNames = {
+const hookNames: Record<string, LifecycleHooks> = {
   [LIFECYCLE_WILL_ENTER]: LifecycleHooks.WillEnter,
   [LIFECYCLE_DID_ENTER]: LifecycleHooks.DidEnter,
   [LIFECYCLE_WILL_LEAVE]: LifecycleHooks.WillLeave,
   [LIFECYCLE_DID_LEAVE]: LifecycleHooks.DidLeave,
+  [TAB_ROOT_TAP]: LifecycleHooks.TabRootTap,
 };
 
 const ids: { [k: string]: number } = { main: 0 };
@@ -39,7 +43,7 @@ export const generateId = (type = "main") => {
 export const fireLifecycle = (
   vueComponent: any,
   vueInstance: Ref<ComponentPublicInstance>,
-  lifecycle: LIFECYCLE_EVENTS
+  lifecycle: PAGE_EVENTS
 ) => {
   if (vueComponent?.[lifecycle]) {
     vueComponent[lifecycle].bind(vueInstance?.value)();

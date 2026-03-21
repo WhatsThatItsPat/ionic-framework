@@ -16,6 +16,7 @@ import {
   LIFECYCLE_WILL_ENTER,
   LIFECYCLE_WILL_LEAVE,
   LIFECYCLE_WILL_UNLOAD,
+  TAB_ROOT_TAP,
 } from '@ionic/core/components';
 
 import { NavParams } from '../directives/navigation/nav-params';
@@ -228,7 +229,7 @@ export const attachView = (
       hostElement.classList.add(cssClass);
     }
   }
-  const unbindEvents = bindLifecycleEvents(zone, instance, hostElement);
+  const unbindEvents = bindPageEvents(zone, instance, hostElement);
   container.appendChild(hostElement);
 
   applicationRef.attachView(componentRef.hostView);
@@ -246,9 +247,11 @@ const LIFECYCLES = [
   LIFECYCLE_WILL_UNLOAD,
 ];
 
-export const bindLifecycleEvents = (zone: NgZone, instance: any, element: HTMLElement): (() => void) => {
+const PAGE_EVENTS = [...LIFECYCLES, TAB_ROOT_TAP];
+
+export const bindPageEvents = (zone: NgZone, instance: any, element: HTMLElement): (() => void) => {
   return zone.run(() => {
-    const unregisters = LIFECYCLES.filter((eventName) => typeof instance[eventName] === 'function').map((eventName) => {
+    const unregisters = PAGE_EVENTS.filter((eventName) => typeof instance[eventName] === 'function').map((eventName) => {
       const handler = (ev: any) => instance[eventName](ev.detail);
       element.addEventListener(eventName, handler);
       return () => element.removeEventListener(eventName, handler);

@@ -22,6 +22,10 @@ export const IonTabButton = /*@__PURE__*/ defineComponent({
       type: Function,
       required: false,
     },
+    _onTabRootTap: {
+      type: Function,
+      required: false,
+    },
   },
   setup(props, { slots }) {
     defineCustomElement();
@@ -76,6 +80,8 @@ export const IonTabButton = /*@__PURE__*/ defineComponent({
         if (prevActiveTab === tab) {
           if (originalHref !== currentHref) {
             ionRouter.resetTab(tab);
+          } else if (props._onTabRootTap) {
+            props._onTabRootTap(tab);
           }
         } else {
           ionRouter.changeTab(tab, currentHref);

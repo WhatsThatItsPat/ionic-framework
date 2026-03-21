@@ -5,10 +5,10 @@ export { NavController } from './providers/nav-controller';
 export { Config, ConfigToken } from './providers/config';
 export { Platform } from './providers/platform';
 
-export { AngularDelegate, bindLifecycleEvents, IonModalToken } from './providers/angular-delegate';
+export { AngularDelegate, bindPageEvents, bindPageEvents as bindLifecycleEvents, IonModalToken } from './providers/angular-delegate';
 
 export type { IonicWindow } from './types/interfaces';
-export type { ViewDidEnter, ViewDidLeave, ViewWillEnter, ViewWillLeave } from './types/ionic-lifecycle-hooks';
+export type { TabRootTap, ViewDidEnter, ViewDidLeave, ViewWillEnter, ViewWillLeave } from './types/ionic-lifecycle-hooks';
 export type { ModalOptions, PopoverOptions } from './types/overlay-options';
 
 export { NavParams } from './directives/navigation/nav-params';

@@ -11,9 +11,27 @@ import {
   QueryList,
 } from '@angular/core';
 
+import { TAB_ROOT_TAP } from '@ionic/core/components';
+
 import { NavController } from '../../providers/nav-controller';
 
 import { StackDidChangeEvent, StackWillChangeEvent } from './stack-utils';
+
+/**
+ * Dispatches the ionTabRootTap event on the given element.
+ * This event is fired when the user taps the active tab button
+ * while already at the root page of that tab's navigation stack,
+ * allowing the page to respond (e.g. scroll to top, refresh).
+ */
+function dispatchTabRootTap(element: HTMLElement, tab: string) {
+  element.dispatchEvent(
+    new CustomEvent(TAB_ROOT_TAP, {
+      bubbles: false,
+      cancelable: false,
+      detail: { tab },
+    })
+  );
+}
 
 @Directive({
   selector: 'ion-tabs',
@@ -127,6 +145,19 @@ export abstract class IonTabs implements AfterViewInit, AfterContentInit, AfterC
      * component itself.
      */
     if (this.hasTab) {
+      /**
+       * If the same tab is already selected and tapped again,
+       * dispatch the ionTabRootTap event on the tab element
+       * so the page can respond (e.g. scroll to top, refresh).
+       */
+      if (this.selectedTab?.tab === tab) {
+        const selectedTab = this.tabs.find((t: any) => t.tab === tab);
+        if (selectedTab?.el) {
+          dispatchTabRootTap(selectedTab.el, tab);
+        }
+        return;
+      }
+
       this.setActiveTab(tab);
       this.tabSwitch();
 
@@ -152,6 +183,9 @@ export abstract class IonTabs implements AfterViewInit, AfterContentInit, AfterC
 
       // If on root tab, do not navigate to root tab again
       if (activeView?.url === tabRootUrl) {
+        if (activeView?.element) {
+          dispatchTabRootTap(activeView.element, tab);
+        }
         return;
       }
 

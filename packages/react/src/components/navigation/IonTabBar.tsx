@@ -1,4 +1,5 @@
 import type { JSX as LocalJSX } from '@ionic/core/components';
+import { TAB_ROOT_TAP } from '@ionic/core/components';
 import React, { useContext } from 'react';
 
 import { NavContext } from '../../contexts/NavContext';
@@ -222,6 +223,22 @@ class IonTabBarUnwrapped extends React.PureComponent<InternalProps, IonTabBarSta
     if (prevActiveTab === e.detail.tab) {
       if (originalHref !== currentHref) {
         this.context.resetTab(e.detail.tab, originalHref, tappedTab.originalRouteOptions);
+      } else if (hasRouterOutlet) {
+        /**
+         * If the tab is already at its root page, dispatch the
+         * ionTabRootTap event on the active page element so
+         * the page can respond (e.g. scroll to top, refresh).
+         */
+        const activePage = this.findActivePageElement(e);
+        if (activePage) {
+          activePage.dispatchEvent(
+            new CustomEvent(TAB_ROOT_TAP, {
+              bubbles: false,
+              cancelable: false,
+              detail: { tab: e.detail.tab },
+            })
+          );
+        }
       }
     } else {
       if (this.props.onIonTabsWillChange) {
@@ -235,6 +252,20 @@ class IonTabBarUnwrapped extends React.PureComponent<InternalProps, IonTabBarSta
         this.context.changeTab(e.detail.tab, currentHref, e.detail.routeOptions);
       }
     }
+  }
+
+  /**
+   * Finds the active (visible) page element inside the
+   * ion-router-outlet that is within the closest ion-tabs.
+   */
+  private findActivePageElement(e: CustomEvent): HTMLElement | undefined {
+    const target = e.target as HTMLElement | null;
+    const tabsEl = target?.closest('ion-tabs');
+    if (!tabsEl) return undefined;
+    const outlet = tabsEl.querySelector('ion-router-outlet');
+    if (!outlet) return undefined;
+    const activePage = outlet.querySelector(':scope > .ion-page:not(.ion-page-hidden)');
+    return (activePage as HTMLElement) || undefined;
   }
 
   private renderTabButton(activeTab: string | null | undefined) {
