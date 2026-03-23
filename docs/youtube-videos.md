@@ -153,19 +153,16 @@ A proposed series walking through the real process of authoring a Feature Reques
   - Extend `disconnectedCallback`: destroy the controller to prevent memory leaks
   - Add `'keyboard-showing': this.keyboardVisible` to the `Host` class map
 
-- **Write the unit tests.** Create `app.spec.ts`:
-  - `newSpecPage` from Stencil's testing library mounts the component in jsdom
-  - Dispatch `keyboardWillShow` / `keyboardWillHide` on `window` to simulate the native events
-  - `await page.waitForChanges()` lets Stencil process state updates
-  - Assert the class is present/absent
-
-- **Run the tests and linter:**
+- **Run the linter:**
   ```bash
-  ./node_modules/.bin/stencil test --spec --testPathPattern="app.spec"
   npm run lint.ts
   ```
 
 - **Test it in the playground app.** Use `npm pack` + `npm install file:...` (see the [Local Dev Playground guide](./local-dev-playground.md)) to load your local Ionic build in the playground app. Open Safari DevTools and verify `keyboard-showing` appears on `ion-app` when the keyboard opens.
+
+  > **Why no spec test for `ion-app` keyboard behavior?** The `keyboard-showing` class is an intermediate mechanism — not a user-facing outcome. Ionic's convention is to test on the *affected component* (where the CSS fires and the result is visible), not on whatever sets the class. See `overlay-hidden`, `label-floating`, and `ion-activated` — all tested on the component that uses the class.
+  >
+  > The tab-bar e2e tests in Episode 8 serve as the meaningful test: the tab bar can only become `toBeHidden()` if `ion-app` correctly sets `keyboard-showing`. Separate app-level tests would be redundant.
 
   > **Angular tip:** In your Angular playground app, you can now use this class in two ways:
   > 1. **Global CSS** (in `global.scss`): `ion-app.keyboard-showing ion-footer { display: none; }`
@@ -315,41 +312,24 @@ A proposed series walking through the real process of authoring a Feature Reques
 
 ### What to cover
 
-- **Why these need to be e2e tests, not spec tests.** The two things we're testing — (1) the `keyboard-showing` class appearing on `ion-app` and (2) `ion-tab-bar` becoming hidden via `:host-context()` CSS — both involve computed styles or shadow DOM rendering that jsdom doesn't support.
+- **Why these tests are e2e, not spec.** The behaviors being verified — `:host-context()` CSS making `ion-tab-bar` `display: none`, and the `slot="top"` exception — require a real browser. jsdom doesn't render CSS and has known quirks with the `slot` attribute.
 
-- **The Playwright setup.** E2E tests in this repo use Playwright running in Chromium. The tests are in `*.e2e.ts` files in a `test/` subdirectory. Each test uses `page.setContent()` or `page.goto()` to load HTML, and the Ionic bundle is injected automatically. Note: these tests run against the **built** `dist/` files, not the TypeScript source. You need `npm run build` first.
+- **Why no `app/test/keyboard/app.e2e.ts`.** The `keyboard-showing` class on `ion-app` is an intermediate mechanism. Ionic's pattern — see how `overlay-hidden`, `label-floating`, `ion-activated` are tested — is to test the **outcome on the affected component**, not the class-setter. The `tab-bar.e2e.ts` tests are the meaningful test: the tab bar can only become `toBeHidden()` if `ion-app` correctly received the event and set `keyboard-showing`. That implicit coverage is exactly what a well-designed e2e test provides. A separate `app.e2e.ts` testing `keyboard-showing` on a bare `<ion-app>` would be testing a mechanism, not a user-facing outcome.
 
-- **Write `app/test/keyboard/app.e2e.ts`:**
-  ```ts
-  configs({ modes: ['ios'], directions: ['ltr'] }).forEach(({ title, config }) => {
-    test.describe(title('app: keyboard'), () => {
-      test('should add keyboard-showing class when keyboard opens', async ({ page }) => {
-        await page.setContent(`<ion-app></ion-app>`, config);
-        const ionApp = page.locator('ion-app');
-        await expect(ionApp).not.toHaveClass(/keyboard-showing/);
-        await page.evaluate(() => window.dispatchEvent(new Event('keyboardWillShow')));
-        await page.waitForChanges();
-        await expect(ionApp).toHaveClass(/keyboard-showing/);
-      });
-      // ... remove test similarly
-    });
-  });
-  ```
-  Key APIs:
-  - `page.evaluate(() => window.dispatchEvent(...))` — runs code in the browser to simulate the native event
-  - `page.waitForChanges()` — waits for Stencil to process state changes and re-render
-  - `expect(locator).toHaveClass(/regex/)` — asserts class presence without caring about other classes
+- **The Playwright setup.** E2E tests in this repo use Playwright running in Chromium. The tests are in `*.e2e.ts` files in a `test/` subdirectory. Each test uses `page.setContent()` to load HTML, and the Ionic bundle is injected automatically. Note: these tests run against the **built** `dist/` files. You need `npm run build` first.
 
 - **Write `tab-bar/test/keyboard/tab-bar.e2e.ts`:**
-  Four tests:
+  Three primary tests plus one deprecated:
   1. `should hide via CSS when keyboard opens` — asserts `toBeHidden()` after `keyboardWillShow`
   2. `should show again when keyboard closes` — asserts `toBeVisible()` after `keyboardWillHide`
   3. `should not hide when slot="top"` — asserts `toBeVisible()` even after `keyboardWillShow` (**this is the test that couldn't be written as a spec test**)
-  4. `should still set deprecated tab-bar-hidden class` — marked `@deprecated`, asserts backward compat
+  4. `should still set deprecated tab-bar-hidden class` — marked `@deprecated`, asserts backward compat; remove when `tab-bar-hidden` is removed
 
-- **Explain `toBeHidden()`.** Playwright's `toBeHidden()` checks computed visibility — if the shadow DOM's `:host-context()` rule applies `display: none` to the `ion-tab-bar` host element, the element's computed `display` is `none` from the outside. Playwright can see this. This is the key reason these tests are meaningful: they prove the CSS actually works in a real Chromium engine.
+- **Explain `toBeHidden()`.** Playwright's `toBeHidden()` checks computed visibility — if the shadow DOM's `:host-context()` rule applies `display: none` to the `ion-tab-bar` host element, the element's computed `display` is `none` from the outside. Playwright can see this. This is the key reason these tests are meaningful: they prove the CSS actually works in a real Chromium engine, and simultaneously prove `ion-app` set the class correctly.
 
-- **Run a single e2e test locally:**
+- **The spec test for tab-bar (`tab-bar.spec.ts`).** There's one spec test — the deprecation `console.warn` test. That is the *only* thing that must be in a spec test: `jest.spyOn(console, 'warn')` catches `printIonWarning` output. This can't be done cleanly in an e2e test. Everything else — the class behavior, the CSS hiding — lives in e2e.
+
+- **Run the e2e tests locally:**
   ```bash
   cd core
   npm run build   # required — e2e tests run against dist/
@@ -358,7 +338,7 @@ A proposed series walking through the real process of authoring a Feature Reques
 
 ### Tips & lessons
 
-- **E2E tests need a build.** Unlike spec tests (which run against TypeScript source), Playwright tests need `npm run build` first. Show the error you get if you forget.
+- **Test the outcome, not the mechanism.** `toBeHidden()` after a keyboard open proves everything in the chain: event fired, `ion-app` set the class, CSS fired. Testing `keyboard-showing` on `ion-app` in isolation would prove only one step, and would be made redundant by the tab-bar test passing.
 - **`page.evaluate` runs in browser context.** This is how you trigger the keyboard events. The callback you pass runs in the browser's JS context, not Node.js.
 - **Mode-locked tests.** These tests use `configs({ modes: ['ios'], directions: ['ltr'] })` because keyboard behavior doesn't differ by mode. Using the full `configs()` would run redundant tests.
 - **Delete the deprecated test when the class is removed.** The `@deprecated` comment on the test is a reminder — it's not just for docs.
@@ -547,7 +527,7 @@ This is a synthesis episode pulling out all the Angular threads from the series 
 | 1 | The Problem: Building the Example App | FR due diligence, workaround first | Signals, standalone components |
 | 2 | Safari DevTools: Reading the DOM | DOM inspection, shadow root / slot structure | — |
 | 3 | Navigating the Ionic Codebase | Grep-first, trace the data flow | — |
-| 4 | Implementing: `keyboard-showing` on `ion-app` | `@State`, `newSpecPage` | `:host-context()` in Angular, `ViewEncapsulation` |
+| 4 | Implementing: `keyboard-showing` on `ion-app` | `@State`, outcome-based testing | `:host-context()` in Angular, `ViewEncapsulation` |
 | 5 | CSS Architecture: `:host-context()` | Shadow DOM, CSS-over-JS, performance | — |
 | 6 | Why `aria-hidden` Was There | CSS containment, AT tree, shadow DOM edge cases | — |
 | 7 | Deprecating APIs the Right Way | `printIonWarning`, `classList.toggle`, `@State` when not to use it | — |

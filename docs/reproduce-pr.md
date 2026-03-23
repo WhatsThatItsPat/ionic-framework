@@ -26,7 +26,6 @@ npm install
 
 **Files changed:**
 - `core/src/components/app/app.tsx`
-- `core/src/components/app/test/app.spec.ts`
 
 **What to do:**
 
@@ -58,22 +57,16 @@ In `core/src/components/app/app.tsx`:
 6. Extend `disconnectedCallback()` to destroy the controller
 7. Add `'keyboard-showing': this.keyboardVisible` to the `Host` class map in `render()`
 
-### 1c. Write the unit tests
-
-Create `core/src/components/app/test/app.spec.ts` with two tests:
-
-- `should add keyboard-showing class to ion-app when keyboard opens`
-- `should remove keyboard-showing class from ion-app when keyboard closes`
-
-Each test uses `newSpecPage`, dispatches `keyboardWillShow` / `keyboardWillHide` on `window`, then asserts the class.
-
-### 1d. Verify
+### 1c. Verify
 
 ```bash
 cd core
-./node_modules/.bin/stencil test --spec --testPathPattern="app.spec"
 npm run lint.ts
 ```
+
+> **Note — no spec test for `ion-app` keyboard behavior.** Ionic's convention is to test on the *affected component* (where the CSS fires and the behavior is user-visible), not on the class-setter. See `overlay-hidden`, `label-floating`, `ion-activated` — all tested on the component that uses the class.
+>
+> The `keyboard-showing` class on `ion-app` is an intermediate mechanism. The tab-bar e2e tests (`tab-bar/test/keyboard/tab-bar.e2e.ts`) provide the meaningful assertion: the tab bar can only become hidden if `ion-app` correctly set `keyboard-showing`. A separate app spec would be redundant.
 
 ---
 
@@ -169,12 +162,13 @@ Bring `KeyboardController` back to `tab-bar.tsx`, but use it only to maintain ba
 
 This requires `@Element() el` and the full controller lifecycle, but no `@State()`.
 
-### 3c. Write backward-compat tests
+### 3c. Write the deprecation warning test
 
-Create `core/src/components/tab-bar/test/tab-bar.spec.ts` with tests marked `@deprecated`:
+Create `core/src/components/tab-bar/test/tab-bar.spec.ts` with a single test:
 
-- `should add tab-bar-hidden class when keyboard opens`
-- `should remove tab-bar-hidden class when keyboard closes`
+- `should warn about tab-bar-hidden deprecation when keyboard first opens`
+
+This is the only behavior that **must** be in a spec test: it uses `jest.spyOn(console, 'warn')` to intercept `printIonWarning` output, which isn't practical in an e2e test. The class add/remove behavior is covered by the e2e tests in commit 5.
 
 ### 3d. Verify
 
@@ -223,71 +217,55 @@ One-shot per instance: the flag prevents the warning from spamming on every keyb
 
 ### 4d. Update the test
 
-Add a third test to `tab-bar.spec.ts`:
+Add the deprecation warning test to `tab-bar.spec.ts` (or this can be combined with commit 3 — the spec file only ever needs one test):
 
 - `should warn about tab-bar-hidden deprecation when keyboard first opens`
   - Spy on `console.warn` with `jest.spyOn`
   - Verify it's called exactly once on the first keyboard open
   - Verify it's NOT called again on the second keyboard open
+  - Call `mockRestore()` to avoid polluting other tests
 
 ### 4e. Final verification
 
 ```bash
-./node_modules/.bin/stencil test --spec --testPathPattern="tab-bar.spec|app.spec"
+./node_modules/.bin/stencil test --spec --testPathPattern="tab-bar.spec"
 npm run lint.ts && npm run lint.sass
 ```
 
 ---
 
-## Commit 5 — `test(app,tab-bar): add e2e tests for keyboard-showing and CSS hiding`
+## Commit 5 — `test(tab-bar): add e2e tests for keyboard-showing and CSS hiding`
 
 **Files changed:**
-- `core/src/components/app/test/keyboard/app.e2e.ts`
 - `core/src/components/tab-bar/test/keyboard/tab-bar.e2e.ts`
 
 **What to do:**
 
-### 5a. Why e2e (not more spec tests)
+### 5a. Why e2e (and why only tab-bar, not app)
 
-The two behaviors we're adding e2e tests for can't be validated in jsdom (the spec test environment):
-- Whether the `keyboard-showing` class actually appears on the rendered `ion-app` element in a real browser
-- Whether the `:host-context()` CSS rule makes `ion-tab-bar` `display: none` — jsdom doesn't render CSS, so spec tests can't verify this
+The behaviors being tested require a real browser:
+- Whether `:host-context()` CSS makes `ion-tab-bar` `display: none` — jsdom doesn't render CSS
 - Whether the `slot="top"` exception works — jsdom has known quirks with the `slot` attribute
 
-### 5b. Create `app/test/keyboard/app.e2e.ts`
+**Why no `app/test/keyboard/app.e2e.ts`:** The `keyboard-showing` class on `ion-app` is an intermediate step. If the tab bar hides (`toBeHidden()`), `ion-app` must have set `keyboard-showing` — the e2e tests for the tab bar are the meaningful end-to-end assertion. Testing `keyboard-showing` in isolation on a bare `<ion-app>` would duplicate coverage that's already implicit. Ionic's convention is to test on the affected component (where the CSS fires and the behavior is user-visible), not on the class-setter.
 
-```ts
-configs({ modes: ['ios'], directions: ['ltr'] }).forEach(({ title, config }) => {
-  test.describe(title('app: keyboard'), () => {
-    test('should add keyboard-showing class when keyboard opens', async ({ page }) => {
-      await page.setContent(`<ion-app></ion-app>`, config);
-      const ionApp = page.locator('ion-app');
-      await expect(ionApp).not.toHaveClass(/keyboard-showing/);
-      await page.evaluate(() => window.dispatchEvent(new Event('keyboardWillShow')));
-      await page.waitForChanges();
-      await expect(ionApp).toHaveClass(/keyboard-showing/);
-    });
-    // ... and the remove test
-  });
-});
-```
+### 5b. Create `tab-bar/test/keyboard/tab-bar.e2e.ts`
+
+Three tests for the primary behavior:
+1. `should hide via CSS when keyboard opens` — `toBeHidden()` after `keyboardWillShow`
+2. `should show again when keyboard closes` — `toBeVisible()` after `keyboardWillHide`
+3. `should not hide when slot="top"` — `toBeVisible()` even after `keyboardWillShow` (the test that couldn't be written as a spec test)
+
+Plus one deprecated backward-compat test (remove when `tab-bar-hidden` is removed):
+4. `should still set deprecated tab-bar-hidden class when keyboard opens` — `toHaveClass(/tab-bar-hidden/)`
+
+Why `toBeHidden()` works for the `:host-context()` test: Playwright checks computed CSS visibility. When the shadow DOM rule applies `display: none` to the `:host` element, the `ion-tab-bar` element's computed `display` is `none` from the light DOM. Playwright can see this — which is exactly what makes this test valuable.
 
 Key APIs:
 - `page.evaluate(fn)` — runs `fn` in the browser context (not Node.js). This is how you dispatch the native-equivalent keyboard events.
 - `page.waitForChanges()` — waits for Stencil to process the state change and re-render.
-- `expect(locator).toHaveClass(/regex/)` — matches against any class in the class list.
 
-### 5c. Create `tab-bar/test/keyboard/tab-bar.e2e.ts`
-
-Four tests:
-1. `should hide via CSS when keyboard opens` — `toBeHidden()` after `keyboardWillShow`
-2. `should show again when keyboard closes` — `toBeVisible()` after `keyboardWillHide`
-3. `should not hide when slot="top"` — `toBeVisible()` even after `keyboardWillShow` (the test that couldn't be written as a spec test)
-4. `@deprecated` — `should still set deprecated tab-bar-hidden class` — `toHaveClass(/tab-bar-hidden/)` (remove in next major version)
-
-Why `toBeHidden()` works for the `:host-context()` test: Playwright checks computed CSS visibility. When the shadow DOM rule applies `display: none` to the `:host` element, the `ion-tab-bar` element's computed `display` is `none` from the light DOM. Playwright can see this — which is exactly what makes this test valuable.
-
-### 5d. Verify the TypeScript compiles
+### 5c. Verify the TypeScript compiles
 
 ```bash
 cd core && npm run lint.ts
@@ -305,11 +283,11 @@ cd core && npm run lint.ts
 
 | # | Message | Files |
 |---|---------|-------|
-| 1 | `feat(app): add keyboard-showing class to ion-app when keyboard is open` | `app.tsx`, `app.spec.ts` |
+| 1 | `feat(app): add keyboard-showing class to ion-app when keyboard is open` | `app.tsx` |
 | 2 | `feat(tab-bar): move keyboard hiding to CSS :host-context()` | `tab-bar.scss`, `tab-bar.tsx` |
-| 3 | `fix(tab-bar): restore tab-bar-hidden emission for proper deprecation period` | `tab-bar.tsx`, `tab-bar.spec.ts` |
+| 3 | `fix(tab-bar): restore tab-bar-hidden emission for proper deprecation period` | `tab-bar.tsx` |
 | 4 | `feat(tab-bar): add deprecation warning for tab-bar-hidden class` | `tab-bar.tsx`, `tab-bar.spec.ts` |
-| 5 | `test(app,tab-bar): add e2e tests for keyboard-showing and CSS hiding` | `app/test/keyboard/app.e2e.ts`, `tab-bar/test/keyboard/tab-bar.e2e.ts` |
+| 5 | `test(tab-bar): add e2e tests for keyboard-showing and CSS hiding` | `tab-bar/test/keyboard/tab-bar.e2e.ts` |
 
 ---
 
