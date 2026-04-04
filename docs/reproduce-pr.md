@@ -168,52 +168,6 @@ npm run lint.ts
 
 ---
 
-## Commit 4 — `feat(tab-bar): add deprecation warning for tab-bar-hidden class`
-
-**Files changed:**
-- `core/src/components/tab-bar/tab-bar.tsx`
-
-**What to do:**
-
-### 4a. Import `printIonWarning`
-
-```ts
-import { printIonWarning } from '@utils/logging';
-```
-
-### 4b. Add a one-shot warning flag
-
-```ts
-private hasWarnedDeprecation = false;
-```
-
-### 4c. Fire the warning once
-
-Inside the `KeyboardController` callback, before `classList.toggle`, add:
-
-```ts
-if (shouldHide && !this.hasWarnedDeprecation) {
-  printIonWarning(
-    '[ion-tab-bar] - The `tab-bar-hidden` class is deprecated and will be removed in a future major version of Ionic. ' +
-      'Use `ion-app.keyboard-showing` instead to respond to keyboard visibility changes.',
-    this.el
-  );
-  this.hasWarnedDeprecation = true;
-}
-```
-
-One-shot per instance: the flag prevents the warning from spamming on every keyboard open/close cycle. The element reference is passed as the second argument so the browser console can link to the element in the inspector.
-
-> **Why no test?** `printIonWarning` itself is tested at the utility level in `core/src/utils/logging/test/logging.spec.ts`. No other component in the framework tests whether a specific `printIonWarning` call fires — we follow the same pattern here.
-
-### 4d. Final verification
-
-```bash
-npm run lint.ts && npm run lint.sass
-```
-
----
-
 ## Summary of commits
 
 | # | Message | Files |
@@ -221,7 +175,6 @@ npm run lint.ts && npm run lint.sass
 | 1 | `feat(app): add keyboard-showing class to ion-app when keyboard is open` | `app.tsx` |
 | 2 | `feat(tab-bar): move keyboard hiding to CSS :host-context()` | `tab-bar.scss`, `tab-bar.tsx` |
 | 3 | `fix(tab-bar): restore tab-bar-hidden emission for proper deprecation period` | `tab-bar.tsx` |
-| 4 | `feat(tab-bar): add deprecation warning for tab-bar-hidden class` | `tab-bar.tsx` |
 
 ---
 
@@ -231,7 +184,7 @@ This PR adds no new spec or e2e tests, and that is intentional.
 
 - **Ionic never tested `tab-bar-hidden`** — the previous keyboard-driven class behavior on `ion-tab-bar` had zero test coverage in the original framework.
 - **Keyboard events are Capacitor/Cordova-only** — `keyboardWillShow` and `keyboardWillHide` are fired by native runtime bridges. Dispatching synthetic equivalents in Playwright/jsdom tests doesn't represent the real device scenario.
-- **`printIonWarning` is tested at the utility level** — `core/src/utils/logging/test/logging.spec.ts` verifies the function itself. No other component in the framework tests whether its specific `printIonWarning` call fires.
+- **`printIonWarning` is not called per-component.** We considered adding a console warning when `tab-bar-hidden` is first applied, but the warning would fire for **every** Capacitor/Cordova user on every keyboard open — not just users whose CSS or JS relies on `.tab-bar-hidden`. There's no way to detect actual usage of the class. The deprecation is announced in release notes instead. The class remains emitted for the full deprecation window.
 - **Manual verification is appropriate here** — use the playground app (see [local-dev-playground.md](./local-dev-playground.md)) with Safari DevTools on a real or simulated device to confirm the behavior.
 
 ---

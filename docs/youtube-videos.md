@@ -244,9 +244,7 @@ A proposed series walking through the real process of authoring a Feature Reques
 ## Episode 7 — Deprecating APIs the Right Way
 
 **Duration:** ~20 min  
-**Commits covered:**
-- `fix(tab-bar): restore tab-bar-hidden emission for proper deprecation period`
-- `feat(tab-bar): add deprecation warning for tab-bar-hidden class`
+**Commit covered:** `fix(tab-bar): restore tab-bar-hidden emission for proper deprecation period`
 
 ### What to cover
 
@@ -276,27 +274,19 @@ A proposed series walking through the real process of authoring a Feature Reques
   - `@Element() el` is needed to access `this.el`
   - The full controller lifecycle is needed for correctness
 
-- **Add a deprecation warning.** Find `picker-legacy/picker.tsx` — it's the template:
-  ```ts
-  printIonWarning('[ion-tab-bar] - The `tab-bar-hidden` class is deprecated...', this.el);
-  ```
-  - One-shot per instance (`hasWarnedDeprecation` flag)
-  - Fires on the first keyboard open, not on every cycle
-  - Element reference lets the browser console link to the element in the inspector
-
-- **Why no test for the deprecation warning?** `printIonWarning` is tested at the utility level in `core/src/utils/logging/test/logging.spec.ts` — that's where the function itself is verified. No component in the Ionic framework tests whether its own specific `printIonWarning` call fires. Following that pattern, we don't add a component-level spec test here either.
+- **Should we add a console deprecation warning?** This is a good question to raise with the audience. Ionic uses `printIonWarning` in some places (e.g. `picker-legacy`) to warn on deprecated usage. But there's a key difference: those warnings fire when a user *explicitly uses a deprecated component*. Here, we can't detect whether a user's CSS or JS actually relies on `.tab-bar-hidden` — the warning would fire for **every single user** with a tab bar in a Capacitor/Cordova app the first time the keyboard opens. That would be an unexpected warning in thousands of apps where the user didn't do anything "wrong." The right channel for this deprecation is the **release notes**, not the console.
 
 - **The full picture.** Draw the state at the end of this commit:
   - `ion-app.keyboard-showing` — new, public, CSS-accessible state
   - `:host-context(ion-app.keyboard-showing)` CSS — actual hiding + AT removal
   - `tab-bar-hidden` class — backward compat, still emitted via `classList.toggle`
-  - Console warning — one-shot, directs users to migrate
+  - Deprecation announced in release notes — no surprise console warnings
 
 ### Tips & lessons
 
-- **Deprecation ≠ removal.** These are two separate commits. Removal happens in a future major version.
-- **Search for the pattern.** `grep -rn "printIonWarning" core/src/components/` found `picker-legacy` as the template.
-- **Document the full migration path in the message.** "X is deprecated, use Y instead" — self-contained.
+- **Deprecation ≠ removal.** These are two separate things. Removal happens in a future major version.
+- **Not all deprecations warrant a console warning.** A warning is appropriate when you can detect *specific deprecated usage*. It's not appropriate when the warning fires unconditionally for all users. Know the difference.
+- **Document the full migration path in release notes.** "X is deprecated, use Y instead" — self-contained.
 - **Things to avoid:** Removing deprecated APIs in the same commit that introduces the replacement.
 
 ---
@@ -315,7 +305,6 @@ A proposed series walking through the real process of authoring a Feature Reques
   1. `app.spec.ts` — 2 spec tests (add/remove `keyboard-showing`). Removed because: spec tests can't test CSS, and jsdom can't render `:host-context()`. Testing a class add/remove with synthetic events in jsdom tests the wiring, not the outcome.
   2. `app/test/keyboard/app.e2e.ts` — 2 e2e tests (add/remove `keyboard-showing` on `<ion-app>`). Removed because: this tests a mechanism, not a user-visible outcome.
   3. `tab-bar/test/keyboard/tab-bar.e2e.ts` — 4 e2e tests (CSS hide, re-show, slot="top", tab-bar-hidden backward compat). Removed because: even these, which test the actual CSS in a real browser, are testing behavior that Ionic never tested for `tab-bar-hidden`. Dispatching synthetic `keyboardWillShow` in Playwright doesn't represent a real Capacitor/Cordova keyboard.
-  4. `tab-bar/test/tab-bar.spec.ts` — 1 spec test (deprecation `console.warn`). Removed because: no component in the framework tests its `printIonWarning` calls at the component level.
 
 - **What WOULD be worth testing?** Have an honest discussion about where the line is:
   - A screenshot e2e test showing the tab bar hidden when `keyboard-showing` is present — this is the Ionic way to verify visual behavior. But it requires a full build and baseline images.
@@ -520,7 +509,7 @@ This is a synthesis episode pulling out all the Angular threads from the series 
 | 4 | Implementing: `keyboard-showing` on `ion-app` | `@State`, playground verification | `:host-context()` in Angular, `ViewEncapsulation` |
 | 5 | CSS Architecture: `:host-context()` | Shadow DOM, CSS-over-JS, performance | — |
 | 6 | Why `aria-hidden` Was There | CSS containment, AT tree, shadow DOM edge cases | — |
-| 7 | Deprecating APIs the Right Way | `printIonWarning`, `classList.toggle`, `@State` when not to use it | — |
+| 7 | Deprecating APIs the Right Way | `classList.toggle`, `@State` when not to use it, when NOT to warn | — |
 | 8 | Testing Philosophy: Why This PR Has No Tests | Match the codebase's standards; synthetic ≠ real; manual verification | — |
 | 9 | The PR Process | Conventional commits, fork, review | Angular wrapper layer, follow-up PRs |
 | 10 | Angular Patterns Across the Series (Bonus) | Synthesis | `@HostListener`, Signals, `async` pipe, Zone.js, GDE path |
