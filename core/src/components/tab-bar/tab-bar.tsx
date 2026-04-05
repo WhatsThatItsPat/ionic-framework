@@ -1,7 +1,5 @@
 import type { ComponentInterface, EventEmitter } from '@stencil/core';
 import { Component, Element, Event, Host, Prop, State, Watch, h } from '@stencil/core';
-import type { KeyboardController } from '@utils/keyboard/keyboard-controller';
-import { createKeyboardController } from '@utils/keyboard/keyboard-controller';
 import { createColorClasses } from '@utils/theme';
 
 import { getIonMode } from '../../global/ionic-global';
@@ -21,13 +19,17 @@ import type { TabBarChangedEventDetail } from './tab-bar-interface';
   shadow: true,
 })
 export class TabBar implements ComponentInterface {
-  private keyboardCtrl: KeyboardController | null = null;
-  private keyboardCtrlPromise: Promise<KeyboardController> | null = null;
+  private keyboardObserver: MutationObserver | null = null;
   private didLoad = false;
 
   @Element() el!: HTMLElement;
 
-  @State() keyboardVisible = false;
+  /**
+   * Whether the tab bar should be hidden because the keyboard is open.
+   * Updated by the MutationObserver watching `ion-app` for the
+   * `keyboard-showing` class (set by `ion-app`'s KeyboardController).
+   */
+  @State() keyboardHidden = false;
 
   /**
    * The color to use from your application's color palette.
@@ -88,61 +90,47 @@ export class TabBar implements ComponentInterface {
     }
   }
 
-  async connectedCallback() {
-    const promise = createKeyboardController(async (keyboardOpen, waitForResize) => {
-      /**
-       * If the keyboard is hiding, then we need to wait
-       * for the webview to resize. Otherwise, the tab bar
-       * will flicker before the webview resizes.
-       */
-      if (keyboardOpen === false && waitForResize !== undefined) {
-        await waitForResize;
-      }
-
-      this.keyboardVisible = keyboardOpen; // trigger re-render by updating state
-    });
-    this.keyboardCtrlPromise = promise;
-
-    const keyboardCtrl = await promise;
-
+  connectedCallback() {
     /**
-     * Only assign if this is still the current promise.
-     * Otherwise, a new connectedCallback has started or
-     * disconnectedCallback was called, so destroy this instance.
+     * Watch `ion-app` for the `keyboard-showing` class (set by `ion-app`'s
+     * own KeyboardController when the soft keyboard opens). When detected,
+     * set `keyboardHidden` state so the `tab-bar-hidden` host class is
+     * applied via render(), which triggers the CSS `:host(.tab-bar-hidden)`
+     * rule to hide this element.
+     *
+     * NOTE: We use `:host(.tab-bar-hidden)` rather than
+     * `:host-context(ion-app.keyboard-showing)` because `:host-context()`
+     * is not supported on Safari/WebKit (iOS). See:
+     * https://caniuse.com/?search=host-context
+     * https://github.com/w3c/csswg-drafts/issues/1914
      */
-    if (this.keyboardCtrlPromise === promise) {
-      this.keyboardCtrl = keyboardCtrl;
-      this.keyboardCtrlPromise = null;
-    } else {
-      keyboardCtrl.destroy();
+    const ionApp = this.el.closest('ion-app');
+    if (ionApp) {
+      this.keyboardObserver = new MutationObserver(() => {
+        this.keyboardHidden = ionApp.classList.contains('keyboard-showing') && this.el.getAttribute('slot') !== 'top';
+      });
+      this.keyboardObserver.observe(ionApp, { attributes: true, attributeFilter: ['class'] });
     }
   }
 
   disconnectedCallback() {
-    if (this.keyboardCtrlPromise) {
-      this.keyboardCtrlPromise.then((ctrl) => ctrl.destroy());
-      this.keyboardCtrlPromise = null;
-    }
-
-    if (this.keyboardCtrl) {
-      this.keyboardCtrl.destroy();
-      this.keyboardCtrl = null;
+    if (this.keyboardObserver) {
+      this.keyboardObserver.disconnect();
+      this.keyboardObserver = null;
     }
   }
 
   render() {
-    const { color, translucent, keyboardVisible } = this;
+    const { color, translucent, keyboardHidden } = this;
     const mode = getIonMode(this);
-    const shouldHide = keyboardVisible && this.el.getAttribute('slot') !== 'top';
 
     return (
       <Host
         role="tablist"
-        aria-hidden={shouldHide ? 'true' : null}
         class={createColorClasses(color, {
           [mode]: true,
           'tab-bar-translucent': translucent,
-          'tab-bar-hidden': shouldHide,
+          'tab-bar-hidden': keyboardHidden,
         })}
       >
         <slot></slot>
