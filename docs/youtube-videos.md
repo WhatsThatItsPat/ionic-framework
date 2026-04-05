@@ -201,7 +201,7 @@ A proposed series walking through the real process of authoring a Feature Reques
 
 - **Walk through the SCSS change.** Show the combined selector, explain every part.
 
-- **Simplify `tab-bar.tsx`.** Remove `@State`, `@Element`, the controller, `aria-hidden`, and `tab-bar-hidden` from `render()`. Show the before/after. The component becomes much simpler.
+- **Simplify `tab-bar.tsx`.** Remove `@State`, the `KeyboardController`, `aria-hidden`, and `tab-bar-hidden` from `render()`. Show the before/after. The component becomes much simpler.
 
 - **But wait — there's a problem.** We've just silently removed `tab-bar-hidden` from being emitted. Anyone whose CSS or app code relied on that class just broke. This leads directly into the next episode.
 
@@ -212,7 +212,7 @@ A proposed series walking through the real process of authoring a Feature Reques
 - **CSS can replace JS when the signal is in the DOM.** Once `ion-app` exposes state, shadow components can react to it with pure CSS.
 - **Fewer moving parts = fewer bugs.** One `KeyboardController` in `ion-app` vs two (one per component) eliminates timing and lifecycle risks.
 - **When to use `:host-context()`.** Only in Capacitor/Cordova contexts, or where you can guarantee Chromium/WebKit support. Document your reasoning.
-- **Is this less performant than the original approach?** No — comparable today, slightly better after deprecation. The original approach: one `KeyboardController` in `ion-tab-bar` → `@State` change → full Stencil re-render of `ion-tab-bar`. Our approach: one `KeyboardController` in `ion-app` → `@State` change → trivial Stencil re-render of `ion-app` (just updates a class map); the CSS cascade reacts to the class at zero JS cost. The `ion-tab-bar` backward-compat callback uses `classList.toggle` directly — cheaper than a full render cycle. Once deprecation is complete (backward-compat controller removed from `tab-bar`), we'll have *fewer* controller instances than before.
+- **Is this less performant than the original approach?** No — comparable today, strictly better after deprecation. The original approach: one `KeyboardController` in `ion-tab-bar` → `@State` change → full Stencil re-render of `ion-tab-bar`. Our approach: one `KeyboardController` in `ion-app` → `@State` change → trivial Stencil re-render of `ion-app` (just updates a class map); the CSS cascade reacts to the class at zero JS cost. The `ion-tab-bar` backward-compat uses a `MutationObserver` on `ion-app`'s class list — no additional keyboard events, no second controller, no re-renders. Once deprecation is complete (observer removed from `tab-bar`), we'll have *fewer* moving parts than before.
 
 ---
 
@@ -266,20 +266,28 @@ A proposed series walking through the real process of authoring a Feature Reques
 
   This is an important Stencil (and more broadly, reactive UI) principle: **only put things in state that affect your rendered output.** If a value drives a side effect but not the template, it doesn't belong in `@State`.
 
-- **The fix: keep it alive, but differently.** Bring the `KeyboardController` back to `tab-bar`, but use it only to emit the deprecated class:
+- **The fix: keep it alive, but differently.** Instead of bringing `KeyboardController` back to `tab-bar`, use a `MutationObserver` to watch `ion-app` for the `keyboard-showing` class:
   ```ts
-  this.el.classList.toggle('tab-bar-hidden', shouldHide);
+  const ionApp = this.el.closest('ion-app');
+  if (ionApp) {
+    this.keyboardObserver = new MutationObserver(() => {
+      const shouldHide = ionApp.classList.contains('keyboard-showing') && this.el.getAttribute('slot') !== 'top';
+      this.el.classList.toggle('tab-bar-hidden', shouldHide);
+    });
+    this.keyboardObserver.observe(ionApp, { attributes: true, attributeFilter: ['class'] });
+  }
   ```
+  - **No duplicate `KeyboardController`** — tab-bar is now a consumer of `ion-app`'s state, not an independent keyboard listener
   - No `@State`, no re-render — the class is a backward-compat shim, not visual logic
-  - `@Element() el` is needed to access `this.el`
-  - The full controller lifecycle is needed for correctness
+  - `@Element() el` is needed to access `this.el` and find the closest `ion-app`
+  - The observer disconnects in `disconnectedCallback` for proper cleanup
 
 - **Should we add a console deprecation warning?** This is a good question to raise with the audience. Ionic uses `printIonWarning` in some places (e.g. `picker-legacy`) to warn on deprecated usage. But there's a key difference: those warnings fire when a user *explicitly uses a deprecated component*. Here, we can't detect whether a user's CSS or JS actually relies on `.tab-bar-hidden` — the warning would fire for **every single user** with a tab bar in a Capacitor/Cordova app the first time the keyboard opens. That would be an unexpected warning in thousands of apps where the user didn't do anything "wrong." The right channel for this deprecation is the **release notes**, not the console.
 
 - **The full picture.** Draw the state at the end of this commit:
-  - `ion-app.keyboard-showing` — new, public, CSS-accessible state
+  - `ion-app.keyboard-showing` — new, public, CSS-accessible state (set via `KeyboardController` in `app.tsx`)
   - `:host-context(ion-app.keyboard-showing)` CSS — actual hiding + AT removal
-  - `tab-bar-hidden` class — backward compat, still emitted via `classList.toggle`
+  - `tab-bar-hidden` class — backward compat, emitted via `MutationObserver` watching `ion-app` (no duplicate `KeyboardController`)
   - Deprecation announced in release notes — no surprise console warnings
 
 ### Tips & lessons
@@ -299,7 +307,7 @@ A proposed series walking through the real process of authoring a Feature Reques
 ### What to cover
 
 - **The honest answer: Ionic never tested `tab-bar-hidden`.**
-  Before this PR, `ion-tab-bar` had a `KeyboardController` that set `tab-bar-hidden` when the keyboard opened. Zero spec tests. Zero e2e tests. Search the repo — you won't find any. This PR moves that keyboard handling to `ion-app`, adds a new CSS rule, and deprecates the old class. Following Ionic's own precedent, we add no tests.
+  Before this PR, `ion-tab-bar` had a `KeyboardController` that set `tab-bar-hidden` when the keyboard opened. Zero spec tests. Zero e2e tests. Search the repo — you won't find any. This PR moves keyboard handling to `ion-app`, adds a new CSS rule, and has `tab-bar` watch `ion-app`'s class via `MutationObserver` for backward compat. Following Ionic's own precedent, we add no tests.
 
 - **Why did we go through the exercise?** Walk through the tests that were written and then deleted during the development of this PR — and why they were ultimately removed:
   1. `app.spec.ts` — 2 spec tests (add/remove `keyboard-showing`). Removed because: spec tests can't test CSS, and jsdom can't render `:host-context()`. Testing a class add/remove with synthetic events in jsdom tests the wiring, not the outcome.
@@ -509,7 +517,7 @@ This is a synthesis episode pulling out all the Angular threads from the series 
 | 4 | Implementing: `keyboard-showing` on `ion-app` | `@State`, playground verification | `:host-context()` in Angular, `ViewEncapsulation` |
 | 5 | CSS Architecture: `:host-context()` | Shadow DOM, CSS-over-JS, performance | — |
 | 6 | Why `aria-hidden` Was There | CSS containment, AT tree, shadow DOM edge cases | — |
-| 7 | Deprecating APIs the Right Way | `classList.toggle`, `@State` when not to use it, when NOT to warn | — |
+| 7 | Deprecating APIs the Right Way | `MutationObserver`, `@State` when not to use it, when NOT to warn | — |
 | 8 | Testing Philosophy: Why This PR Has No Tests | Match the codebase's standards; synthetic ≠ real; manual verification | — |
 | 9 | The PR Process | Conventional commits, fork, review | Angular wrapper layer, follow-up PRs |
 | 10 | Angular Patterns Across the Series (Bonus) | Synthesis | `@HostListener`, Signals, `async` pipe, Zone.js, GDE path |

@@ -148,17 +148,20 @@ npm run lint.ts && npm run lint.sass
 
 Commit 2 stopped emitting `tab-bar-hidden` entirely. That's not a deprecation — it's an immediate breaking change. Any user whose CSS or JS references `.tab-bar-hidden` silently breaks with no warning.
 
-### 3b. Restore class emission — but leaner
+### 3b. Restore class emission — but without a second KeyboardController
 
-Bring `KeyboardController` back to `tab-bar.tsx`, but use it only to maintain backward compatibility. Key differences from the original:
+Instead of bringing `KeyboardController` back, use a `MutationObserver` to watch `ion-app` for the `keyboard-showing` class that `app.tsx` already sets. When the class appears, toggle the deprecated `tab-bar-hidden` class on the tab bar element. Key differences from the original:
 
+- **No `KeyboardController` in tab-bar** — no duplicate keyboard event handling; the tab bar is a consumer of `ion-app`'s state, not an independent keyboard listener
+- **`MutationObserver` on `ion-app`** — watches `{ attributes: true, attributeFilter: ['class'] }` for class changes on the closest `ion-app` ancestor
 - Use `this.el.classList.toggle('tab-bar-hidden', shouldHide)` **directly** — no `@State`, no re-render
 - No `aria-hidden` management (CSS `display: none` handles that)
-- Add a `@deprecated` JSDoc comment in the callback explaining the situation
+- Respects `slot="top"` — top-slotted tab bars don't hide
+- Add a `@deprecated` JSDoc comment explaining the situation
 
-This requires `@Element() el` and the full controller lifecycle, but no `@State()`.
+This requires `@Element() el` and `connectedCallback`/`disconnectedCallback` for observer setup/teardown, but no `@State()` and no `KeyboardController`.
 
-> **Why no test?** This adds keyboard event handling back to the tab bar — the same type of behavior that was in the original code and was never tested. Dispatching synthetic `keyboardWillShow` events in a test doesn't test the real Capacitor/Cordova scenario. Ionic's precedent is to not test this kind of keyboard-driven class behavior.
+> **Why no test?** This adds keyboard-driven behavior back to the tab bar — the same type of behavior that was in the original code and was never tested. Ionic's precedent is to not test this kind of keyboard-driven class behavior.
 
 ### 3c. Verify
 
