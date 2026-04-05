@@ -1,5 +1,5 @@
 import type { ComponentInterface, EventEmitter } from '@stencil/core';
-import { Component, Element, Event, Host, Prop, Watch, h } from '@stencil/core';
+import { Component, Element, Event, Host, Prop, State, Watch, h } from '@stencil/core';
 import { createColorClasses } from '@utils/theme';
 
 import { getIonMode } from '../../global/ionic-global';
@@ -23,6 +23,13 @@ export class TabBar implements ComponentInterface {
   private didLoad = false;
 
   @Element() el!: HTMLElement;
+
+  /**
+   * Whether the tab bar should be hidden because the keyboard is open.
+   * Updated by the MutationObserver watching `ion-app` for the
+   * `keyboard-showing` class (set by `ion-app`'s KeyboardController).
+   */
+  @State() keyboardHidden = false;
 
   /**
    * The color to use from your application's color palette.
@@ -85,22 +92,22 @@ export class TabBar implements ComponentInterface {
 
   connectedCallback() {
     /**
-     * @deprecated - The `tab-bar-hidden` class is deprecated.
-     * The tab bar is now hidden via the
-     * `:host-context(ion-app.keyboard-showing)` CSS selector
-     * (the `keyboard-showing` class is set on `ion-app` by its own
-     * KeyboardController).
+     * Watch `ion-app` for the `keyboard-showing` class (set by `ion-app`'s
+     * own KeyboardController when the soft keyboard opens). When detected,
+     * set `keyboardHidden` state so the `tab-bar-hidden` host class is
+     * applied via render(), which triggers the CSS `:host(.tab-bar-hidden)`
+     * rule to hide this element.
      *
-     * This observer watches `ion-app` for the `keyboard-showing` class
-     * and mirrors it as the legacy `tab-bar-hidden` class on this element
-     * for backward compatibility. It will be removed in a future major
-     * version of Ionic.
+     * NOTE: We use `:host(.tab-bar-hidden)` rather than
+     * `:host-context(ion-app.keyboard-showing)` because `:host-context()`
+     * is not supported on Safari/WebKit (iOS). See:
+     * https://caniuse.com/?search=host-context
+     * https://github.com/w3c/csswg-drafts/issues/1914
      */
     const ionApp = this.el.closest('ion-app');
     if (ionApp) {
       this.keyboardObserver = new MutationObserver(() => {
-        const shouldHide = ionApp.classList.contains('keyboard-showing') && this.el.getAttribute('slot') !== 'top';
-        this.el.classList.toggle('tab-bar-hidden', shouldHide);
+        this.keyboardHidden = ionApp.classList.contains('keyboard-showing') && this.el.getAttribute('slot') !== 'top';
       });
       this.keyboardObserver.observe(ionApp, { attributes: true, attributeFilter: ['class'] });
     }
@@ -114,7 +121,7 @@ export class TabBar implements ComponentInterface {
   }
 
   render() {
-    const { color, translucent } = this;
+    const { color, translucent, keyboardHidden } = this;
     const mode = getIonMode(this);
 
     return (
@@ -123,6 +130,7 @@ export class TabBar implements ComponentInterface {
         class={createColorClasses(color, {
           [mode]: true,
           'tab-bar-translucent': translucent,
+          'tab-bar-hidden': keyboardHidden,
         })}
       >
         <slot></slot>

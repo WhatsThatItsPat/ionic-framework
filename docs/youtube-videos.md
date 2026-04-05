@@ -178,24 +178,30 @@ A proposed series walking through the real process of authoring a Feature Reques
 
 ---
 
-## Episode 5 — CSS Architecture: Shadow DOM and `:host-context()`
+## Episode 5 — CSS Architecture: Shadow DOM, `:host-context()`, and Why It Doesn't Work
 
 **Duration:** ~20 min  
-**Commit covered:** `feat(tab-bar): move keyboard hiding to CSS :host-context()`
+**Commit covered:** `refactor(tab-bar): replace KeyboardController with MutationObserver on ion-app`
 
 ### What to cover
 
-- **The insight.** Now that `ion-app` exposes keyboard state as a class, `ion-tab-bar`'s own `KeyboardController` is redundant. The tab bar can hide itself purely in CSS by reacting to an ancestor's class.
+- **The insight.** Now that `ion-app` exposes keyboard state as a class, `ion-tab-bar`'s own `KeyboardController` is redundant. The tab bar can react to `ion-app`'s state instead.
 
-- **What is `:host-context()`?** A shadow DOM CSS pseudo-function that lets a shadow component react to its ancestor's state:
+- **First attempt: `:host-context()`.** Explain what `:host-context()` is — a shadow DOM CSS pseudo-function that lets a shadow component react to an ancestor's state:
   ```scss
   :host-context(ion-app.keyboard-showing):not([slot="top"]) {
     display: none !important;
   }
   ```
-  `:host-context(selector)` matches if *any ancestor* of the shadow host matches `selector`. `:not([slot="top"])` excludes top-slotted tab bars.
+  Show that Ionic already uses `:host-context()` in `label.scss`, `searchbar.scss`, `buttons.scss`.
 
-- **Why is this safe here?** `:host-context()` has limited browser support — Firefox and some Safari versions don't support it. But keyboard events only fire in **Capacitor/Cordova** contexts, meaning **WKWebView** (iOS) or **Chromium** (Android). Both fully support `:host-context()` in shadow DOM. Show the Ionic codebase already uses `:host-context()` in `label.scss`, `searchbar.scss`, `buttons.scss`.
+- **Try it on a real device — and discover it doesn't work on iOS.** This is a key teaching moment. `:host-context()` is **not supported on Safari/WebKit**:
+  - https://caniuse.com/?search=host-context
+  - https://github.com/w3c/csswg-drafts/issues/1914 (CSSWG issue open since 2017, no resolution)
+  
+  The Ionic codebase already knows this — show the RTL mixin in `ionic.mixins.scss` which generates **three separate fallback selectors** specifically because `:host-context()` is unreliable. The irony: keyboard events primarily fire in Capacitor/Cordova contexts, and iOS (WKWebView/Safari) is the primary target. The CSS-only approach fails exactly where it matters most.
+
+- **The working approach: `MutationObserver` + `@State` + `:host(.tab-bar-hidden)`.** Instead of pure CSS, tab-bar uses a `MutationObserver` to watch `ion-app` for the `keyboard-showing` class and manages its own `tab-bar-hidden` host class via `@State` + `render()`. The CSS rule `:host(.tab-bar-hidden) { display: none !important; }` does the hiding — this works cross-browser because it's a plain host class, not ancestor context.
 
 - **Why does `display: none` handle accessibility?** An element with `display: none` is removed from the browser's accessibility tree automatically — no explicit `aria-hidden="true"` is needed. (We'll explain why the original code had it anyway in the next episode.)
 
@@ -203,16 +209,17 @@ A proposed series walking through the real process of authoring a Feature Reques
 
 - **Simplify `tab-bar.tsx`.** Remove `@State`, the `KeyboardController`, `aria-hidden`, and `tab-bar-hidden` from `render()`. Show the before/after. The component becomes much simpler.
 
-- **But wait — there's a problem.** We've just silently removed `tab-bar-hidden` from being emitted. Anyone whose CSS or app code relied on that class just broke. This leads directly into the next episode.
+- **`classList.toggle` vs `@State` + `render()`.** Explain why we use `@State() keyboardHidden` and include `'tab-bar-hidden': this.keyboardHidden` in the `render()` class map instead of calling `this.el.classList.toggle(...)` directly. `@State` is idiomatic Stencil: it tells the framework "this value drives rendered output." Using `classList.toggle` outside `render()` bypasses the VDOM — a re-render triggered by another cause (prop change) could overwrite `tab-bar-hidden`. With `@State`, the class survives re-renders.
 
-  > **Note for the video:** This is the intentional "make the mistake" moment. Don't hide it or use commented-out code — show the mistake live, run the app, notice the class is gone, and explain why this is actually a breaking change masquerading as a "cleanup." This is a valuable real-world lesson about the difference between a refactor and a breaking change.
+- **How useful is this feature if `:host-context()` doesn't work?** Very useful — the `keyboard-showing` class on `ion-app` is the primary deliverable. Users can use it in global CSS, Angular component styles, or any non-shadow-DOM context. The tab-bar's internal use of `:host(.tab-bar-hidden)` + `MutationObserver` is an implementation detail. The feature request was about exposing keyboard state globally — and that works everywhere.
 
 ### Tips & lessons
 
-- **CSS can replace JS when the signal is in the DOM.** Once `ion-app` exposes state, shadow components can react to it with pure CSS.
+- **Test on real devices early.** `:host-context()` looked perfect in theory and passed linting. Only testing on an iOS simulator revealed the Safari limitation.
+- **CSS can replace JS — but not always across shadow DOM.** `:host-context()` is the right idea but lacks browser support. `:host(.class)` + JS is the pragmatic alternative.
 - **Fewer moving parts = fewer bugs.** One `KeyboardController` in `ion-app` vs two (one per component) eliminates timing and lifecycle risks.
-- **When to use `:host-context()`.** Only in Capacitor/Cordova contexts, or where you can guarantee Chromium/WebKit support. Document your reasoning.
-- **Is this less performant than the original approach?** No — comparable today, strictly better after deprecation. The original approach: one `KeyboardController` in `ion-tab-bar` → `@State` change → full Stencil re-render of `ion-tab-bar`. Our approach: one `KeyboardController` in `ion-app` → `@State` change → trivial Stencil re-render of `ion-app` (just updates a class map); the CSS cascade reacts to the class at zero JS cost. The `ion-tab-bar` backward-compat uses a `MutationObserver` on `ion-app`'s class list — no additional keyboard events, no second controller, no re-renders. Once deprecation is complete (observer removed from `tab-bar`), we'll have *fewer* moving parts than before.
+- **Is this less performant than the original approach?** No — comparable today. The original: one `KeyboardController` in `ion-tab-bar` → `@State` change → full Stencil re-render. Our approach: one `KeyboardController` in `ion-app` → `@State` change → trivial re-render of `ion-app`; a `MutationObserver` in `ion-tab-bar` → `@State` change → re-render of `tab-bar`. Two re-renders instead of one, but both are minimal (just class map updates).
+- **What about the CSS spec roadmap?** The CSSWG issue for `:host-context()` has been open since 2017 with no resolution. The closest alternatives on the horizon are container style queries (`@container style(--keyboard-showing: true)`) and the Open Stylable proposal, but neither is ready yet. For now, the JS bridge (MutationObserver) is the right approach.
 
 ---
 
@@ -241,61 +248,39 @@ A proposed series walking through the real process of authoring a Feature Reques
 
 ---
 
-## Episode 7 — Deprecating APIs the Right Way
+## Episode 7 — API Deprecation, `@State` Design, and When NOT to Warn
 
 **Duration:** ~20 min  
-**Commit covered:** `fix(tab-bar): restore tab-bar-hidden emission for proper deprecation period`
+**No separate commit** — this is a discussion episode reflecting on decisions already made in Commit 2
 
 ### What to cover
-
-- **What went wrong in Episode 5.** We silently removed `tab-bar-hidden` emission. For anyone with `.tab-bar-hidden { ... }` in their app CSS — which might be nobody, or might be many people — this is a silent breaking change.
 
 - **Is `tab-bar-hidden` a public API?** It was never documented as a public API, but that doesn't matter. If people are using it — and they are (as you know from your own day job) — removing it without warning is a breaking change.
 
   > **Tip for the video:** Search for `tab-bar-hidden` on the official [Ionic docs site](https://ionicframework.com/docs). You'll find zero results. That confirms this was always an internal/undocumented API. But that doesn't make it safe to remove quietly — undocumented APIs get discovered through DOM inspection (exactly the way you found it), and once someone builds a production feature on top of one, it becomes effectively public. The lesson: be conservative about removals regardless of whether something is "public."
 
-- **Why is `@State` no longer needed in `tab-bar`?**
-  `@State` exists to tell Stencil "this value drives my rendered output — when it changes, re-run `render()`." It was originally needed because `keyboardVisible` appeared in `render()` to compute `shouldHide`, which then set `aria-hidden` and the `tab-bar-hidden` class.
+- **Why `@State` is the right choice in `tab-bar`.**
+  `@State` exists to tell Stencil "this value drives my rendered output — when it changes, re-run `render()`." Since `tab-bar-hidden` is set in `render()` via the `Host` class map, `@State() keyboardHidden` is the idiomatic approach.
 
-  After our refactor:
-  - `aria-hidden` is gone (CSS `display: none` handles the AT tree)
-  - The visual hiding is done by `:host-context()` CSS — Stencil's render cycle has no part in that
-  - `tab-bar-hidden` is now a backward-compat shim, not a rendering decision
+  An alternative would be `this.el.classList.toggle('tab-bar-hidden', ...)` outside `render()` — but this bypasses Stencil's VDOM. A re-render triggered by another cause (e.g., `color` prop change) would rebuild the Host's class list from the VDOM, silently dropping `tab-bar-hidden`. With `@State`, the class survives re-renders because Stencil manages it.
 
-  Nothing in `render()` needs to know about keyboard state anymore. So there's nothing to trigger a re-render *for*. `classList.toggle` mutates the host element directly — no virtual DOM, no diffing, no re-render. It's the right tool when you're imperatively managing a class that isn't part of the component's shadow template.
-
-  This is an important Stencil (and more broadly, reactive UI) principle: **only put things in state that affect your rendered output.** If a value drives a side effect but not the template, it doesn't belong in `@State`.
-
-- **The fix: keep it alive, but differently.** Instead of bringing `KeyboardController` back to `tab-bar`, use a `MutationObserver` to watch `ion-app` for the `keyboard-showing` class:
-  ```ts
-  const ionApp = this.el.closest('ion-app');
-  if (ionApp) {
-    this.keyboardObserver = new MutationObserver(() => {
-      const shouldHide = ionApp.classList.contains('keyboard-showing') && this.el.getAttribute('slot') !== 'top';
-      this.el.classList.toggle('tab-bar-hidden', shouldHide);
-    });
-    this.keyboardObserver.observe(ionApp, { attributes: true, attributeFilter: ['class'] });
-  }
-  ```
-  - **No duplicate `KeyboardController`** — tab-bar is now a consumer of `ion-app`'s state, not an independent keyboard listener
-  - No `@State`, no re-render — the class is a backward-compat shim, not visual logic
-  - `@Element() el` is needed to access `this.el` and find the closest `ion-app`
-  - The observer disconnects in `disconnectedCallback` for proper cleanup
+  This is an important Stencil (and more broadly, reactive UI) principle: **if a value drives rendered output, put it in `@State`.** If it drives only a side effect (not the template), it doesn't belong in `@State`.
 
 - **Should we add a console deprecation warning?** This is a good question to raise with the audience. Ionic uses `printIonWarning` in some places (e.g. `picker-legacy`) to warn on deprecated usage. But there's a key difference: those warnings fire when a user *explicitly uses a deprecated component*. Here, we can't detect whether a user's CSS or JS actually relies on `.tab-bar-hidden` — the warning would fire for **every single user** with a tab bar in a Capacitor/Cordova app the first time the keyboard opens. That would be an unexpected warning in thousands of apps where the user didn't do anything "wrong." The right channel for this deprecation is the **release notes**, not the console.
 
-- **The full picture.** Draw the state at the end of this commit:
+- **The full picture.** Draw the architecture:
   - `ion-app.keyboard-showing` — new, public, CSS-accessible state (set via `KeyboardController` in `app.tsx`)
-  - `:host-context(ion-app.keyboard-showing)` CSS — actual hiding + AT removal
-  - `tab-bar-hidden` class — backward compat, emitted via `MutationObserver` watching `ion-app` (no duplicate `KeyboardController`)
+  - `tab-bar.tsx` `MutationObserver` — watches `ion-app` for `keyboard-showing`, sets `@State() keyboardHidden`
+  - `render()` — includes `'tab-bar-hidden': this.keyboardHidden` in Host class map
+  - `:host(.tab-bar-hidden)` CSS — hiding + AT removal (cross-browser, unlike `:host-context()`)
   - Deprecation announced in release notes — no surprise console warnings
 
 ### Tips & lessons
 
 - **Deprecation ≠ removal.** These are two separate things. Removal happens in a future major version.
 - **Not all deprecations warrant a console warning.** A warning is appropriate when you can detect *specific deprecated usage*. It's not appropriate when the warning fires unconditionally for all users. Know the difference.
+- **`@State` when it drives render, `classList.toggle` when it doesn't.** This is a core Stencil principle that generalizes to any component framework.
 - **Document the full migration path in release notes.** "X is deprecated, use Y instead" — self-contained.
-- **Things to avoid:** Removing deprecated APIs in the same commit that introduces the replacement.
 
 ---
 
@@ -515,9 +500,9 @@ This is a synthesis episode pulling out all the Angular threads from the series 
 | 2 | Safari DevTools: Reading the DOM | DOM inspection, shadow root / slot structure | — |
 | 3 | Navigating the Ionic Codebase | Grep-first, trace the data flow | — |
 | 4 | Implementing: `keyboard-showing` on `ion-app` | `@State`, playground verification | `:host-context()` in Angular, `ViewEncapsulation` |
-| 5 | CSS Architecture: `:host-context()` | Shadow DOM, CSS-over-JS, performance | — |
+| 5 | CSS Architecture: Why `:host-context()` Doesn't Work | Shadow DOM, Safari limitations, MutationObserver bridge | — |
 | 6 | Why `aria-hidden` Was There | CSS containment, AT tree, shadow DOM edge cases | — |
-| 7 | Deprecating APIs the Right Way | `MutationObserver`, `@State` when not to use it, when NOT to warn | — |
+| 7 | API Deprecation, `@State` Design, When NOT to Warn | `@State` vs `classList.toggle`, when to warn, internal APIs | — |
 | 8 | Testing Philosophy: Why This PR Has No Tests | Match the codebase's standards; synthetic ≠ real; manual verification | — |
 | 9 | The PR Process | Conventional commits, fork, review | Angular wrapper layer, follow-up PRs |
 | 10 | Angular Patterns Across the Series (Bonus) | Synthesis | `@HostListener`, Signals, `async` pipe, Zone.js, GDE path |

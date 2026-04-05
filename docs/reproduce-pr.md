@@ -68,7 +68,7 @@ npm run lint.ts
 
 ---
 
-## Commit 2 — `feat(tab-bar): move keyboard hiding to CSS :host-context()`
+## Commit 2 — `refactor(tab-bar): replace KeyboardController with MutationObserver on ion-app`
 
 **Files changed:**
 - `core/src/components/tab-bar/tab-bar.scss`
@@ -76,58 +76,51 @@ npm run lint.ts
 
 **What to do:**
 
-### 2a. Add the CSS rule to `tab-bar.scss`
+### 2a. Replace the KeyboardController in `tab-bar.tsx`
 
-Append to the end of `core/src/components/tab-bar/tab-bar.scss`:
+Now that `ion-app` manages keyboard state and exposes it as a class, `ion-tab-bar` no longer needs its own `KeyboardController`. Instead, use a `MutationObserver` to watch `ion-app` for the `keyboard-showing` class:
+
+- Remove `KeyboardController` imports
+- Remove the old `keyboardWillShow`/`keyboardWillHide` logic
+- Keep `@Element() el` — needed for `this.el.closest('ion-app')`
+- Change `@State() keyboardVisible` to `@State() keyboardHidden = false` — this tracks whether the tab bar should be hidden
+- In `connectedCallback`, set up a `MutationObserver` on the closest `ion-app`, watching `{ attributes: true, attributeFilter: ['class'] }`. When `keyboard-showing` appears, set `this.keyboardHidden = true` (respecting `slot="top"`)
+- Clean up the observer in `disconnectedCallback`
+- In `render()`, add `'tab-bar-hidden': this.keyboardHidden` to the `Host` class map
+- Remove the `aria-hidden` attribute — `display: none` handles the accessibility tree
+
+**Why `@State` + `render()` instead of `classList.toggle`?** This is the idiomatic Stencil approach. `@State` tells Stencil "this value drives my rendered output — when it changes, re-run `render()`." Using `classList.toggle` outside `render()` bypasses Stencil's VDOM — and a re-render triggered by another cause (e.g., `color` or `translucent` prop change) could overwrite the class list with what Stencil *thinks* it should be, silently removing `tab-bar-hidden`. With `@State`, the class survives re-renders because Stencil manages it in the VDOM.
+
+**Why not `:host-context()`?** You might consider using `:host-context(ion-app.keyboard-showing)` in the CSS to eliminate the need for a `MutationObserver` entirely. However, `:host-context()` is **not supported on Safari/WebKit (iOS)**. Since keyboard events primarily fire in Capacitor/Cordova contexts — and iOS is the primary target — `:host-context()` doesn't work where it matters most. See:
+- https://caniuse.com/?search=host-context
+- https://github.com/w3c/csswg-drafts/issues/1914
+
+Ionic's own RTL mixin (`ionic.mixins.scss`) already demonstrates this limitation: it generates three separate fallback selectors because `:host-context()` is unreliable across browsers.
+
+### 2b. Update `tab-bar.scss`
+
+Update the CSS comment on the `.tab-bar-hidden` rule to explain the architecture:
 
 ```scss
 /**
- * @deprecated - The `tab-bar-hidden` class is deprecated in favor of using
- * `ion-app.keyboard-showing` (set by `ion-app` when the keyboard opens).
- * The new `:host-context(ion-app.keyboard-showing)` selector below handles
- * hiding the tab bar via CSS. The `:host(.tab-bar-hidden)` selector is kept
- * as a backward-compatible fallback and will be removed in a future major
- * version of Ionic.
+ * Hide the tab bar when the keyboard is open. The `keyboard-showing` class
+ * is set on `ion-app` by the KeyboardController when the soft keyboard opens.
+ * The `tab-bar.tsx` component watches for this class via a MutationObserver
+ * and sets the `tab-bar-hidden` host class, which triggers this rule.
+ *
+ * NOTE: We use `:host(.tab-bar-hidden)` rather than
+ * `:host-context(ion-app.keyboard-showing)` because `:host-context()`
+ * is not supported on Safari/WebKit (iOS). See:
+ * https://caniuse.com/?search=host-context
+ * https://github.com/w3c/csswg-drafts/issues/1914
  */
-:host(.tab-bar-hidden),
-:host-context(ion-app.keyboard-showing):not([slot="top"]) {
+:host(.tab-bar-hidden) {
   /* stylelint-disable-next-line declaration-no-important */
   display: none !important;
 }
 ```
 
-Why `:host-context()` is safe here: keyboard events only fire in Capacitor/Cordova contexts (WKWebView on iOS, Chromium on Android). Both runtimes fully support `:host-context()` in shadow DOM, even where desktop Firefox/Safari might not.
-
 Why `display: none` handles accessibility: an element with `display: none` is automatically removed from the browser's accessibility tree. No explicit `aria-hidden="true"` is needed.
-
-Why `:not([slot="top"])`: tab bars placed at the top of the screen (`slot="top"`) should not hide when the keyboard opens — matching the existing JS logic.
-
-### 2b. Simplify `tab-bar.tsx`
-
-Now that `ion-app` manages keyboard state and the CSS handles hiding, `ion-tab-bar` no longer needs its own `KeyboardController` for these purposes. Remove:
-
-- `@State() keyboardVisible`
-- `@Element() el` (no longer needed)
-- `KeyboardController` imports
-- `connectedCallback` and `disconnectedCallback` (keyboard lifecycle only)
-- `aria-hidden` attribute from `render()`
-- `tab-bar-hidden` class from `render()`
-
-The render function simplifies to:
-
-```tsx
-render() {
-  const { color, translucent } = this;
-  const mode = getIonMode(this);
-  return (
-    <Host role="tablist" class={createColorClasses(color, { [mode]: true, 'tab-bar-translucent': translucent })}>
-      <slot></slot>
-    </Host>
-  );
-}
-```
-
-> **Note — intentional "mistake":** This commit deliberately removes `tab-bar-hidden` emission entirely. This is a breaking change masquerading as a cleanup. We fix it properly in commit 3. Whether you're following this guide for a video series or just learning, the value of discovering this mistake (rather than pre-emptively avoiding it) is significant: it teaches the difference between "I no longer set this class" and "I deprecated this class." If you're working methodically rather than for video content, you can include the `classList.toggle` and deprecation warning here in commit 2 — but showing the mistake first and then restoring it more deliberately makes the reasoning clearer.
 
 ### 2c. Verify
 
@@ -137,47 +130,12 @@ npm run lint.ts && npm run lint.sass
 
 ---
 
-## Commit 3 — `fix(tab-bar): restore tab-bar-hidden emission for proper deprecation period`
-
-**Files changed:**
-- `core/src/components/tab-bar/tab-bar.tsx`
-
-**What to do:**
-
-### 3a. The problem with commit 2
-
-Commit 2 stopped emitting `tab-bar-hidden` entirely. That's not a deprecation — it's an immediate breaking change. Any user whose CSS or JS references `.tab-bar-hidden` silently breaks with no warning.
-
-### 3b. Restore class emission — but without a second KeyboardController
-
-Instead of bringing `KeyboardController` back, use a `MutationObserver` to watch `ion-app` for the `keyboard-showing` class that `app.tsx` already sets. When the class appears, toggle the deprecated `tab-bar-hidden` class on the tab bar element. Key differences from the original:
-
-- **No `KeyboardController` in tab-bar** — no duplicate keyboard event handling; the tab bar is a consumer of `ion-app`'s state, not an independent keyboard listener
-- **`MutationObserver` on `ion-app`** — watches `{ attributes: true, attributeFilter: ['class'] }` for class changes on the closest `ion-app` ancestor
-- Use `this.el.classList.toggle('tab-bar-hidden', shouldHide)` **directly** — no `@State`, no re-render
-- No `aria-hidden` management (CSS `display: none` handles that)
-- Respects `slot="top"` — top-slotted tab bars don't hide
-- Add a `@deprecated` JSDoc comment explaining the situation
-
-This requires `@Element() el` and `connectedCallback`/`disconnectedCallback` for observer setup/teardown, but no `@State()` and no `KeyboardController`.
-
-> **Why no test?** This adds keyboard-driven behavior back to the tab bar — the same type of behavior that was in the original code and was never tested. Ionic's precedent is to not test this kind of keyboard-driven class behavior.
-
-### 3c. Verify
-
-```bash
-npm run lint.ts
-```
-
----
-
 ## Summary of commits
 
 | # | Message | Files |
 |---|---------|-------|
 | 1 | `feat(app): add keyboard-showing class to ion-app when keyboard is open` | `app.tsx` |
-| 2 | `feat(tab-bar): move keyboard hiding to CSS :host-context()` | `tab-bar.scss`, `tab-bar.tsx` |
-| 3 | `fix(tab-bar): restore tab-bar-hidden emission for proper deprecation period` | `tab-bar.tsx` |
+| 2 | `refactor(tab-bar): replace KeyboardController with MutationObserver on ion-app` | `tab-bar.scss`, `tab-bar.tsx` |
 
 ---
 
@@ -187,7 +145,7 @@ This PR adds no new spec or e2e tests, and that is intentional.
 
 - **Ionic never tested `tab-bar-hidden`** — the previous keyboard-driven class behavior on `ion-tab-bar` had zero test coverage in the original framework.
 - **Keyboard events are Capacitor/Cordova-only** — `keyboardWillShow` and `keyboardWillHide` are fired by native runtime bridges. Dispatching synthetic equivalents in Playwright/jsdom tests doesn't represent the real device scenario.
-- **`printIonWarning` is not called per-component.** We considered adding a console warning when `tab-bar-hidden` is first applied, but the warning would fire for **every** Capacitor/Cordova user on every keyboard open — not just users whose CSS or JS relies on `.tab-bar-hidden`. There's no way to detect actual usage of the class. The deprecation is announced in release notes instead. The class remains emitted for the full deprecation window.
+- **`printIonWarning` is not called per-component.** We considered adding a console warning for `tab-bar-hidden`, but the warning would fire for **every** Capacitor/Cordova user on every keyboard open — not just users whose CSS or JS relies on `.tab-bar-hidden`. There's no way to detect actual usage of the class.
 - **Manual verification is appropriate here** — use the playground app (see [local-dev-playground.md](./local-dev-playground.md)) with Safari DevTools on a real or simulated device to confirm the behavior.
 
 ---

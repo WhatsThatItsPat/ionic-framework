@@ -73,14 +73,16 @@
 /**
  * Hide the tab bar when the keyboard is open. The `keyboard-showing` class
  * is set on `ion-app` by the KeyboardController when the soft keyboard opens.
+ * The `tab-bar.tsx` component watches for this class via a MutationObserver
+ * and sets the `tab-bar-hidden` host class, which triggers this rule.
  *
- * @deprecated - The `tab-bar-hidden` CSS class is still emitted on the host
- * element by `tab-bar.tsx` for backward compatibility (users may target it in
- * custom CSS), but Ionic's own stylesheet no longer uses it. The class will
- * stop being emitted in a future major version. Use `ion-app.keyboard-showing`
- * or the approach described in the Feature Request for custom styling.
+ * NOTE: We use `:host(.tab-bar-hidden)` rather than
+ * `:host-context(ion-app.keyboard-showing)` because `:host-context()`
+ * is not supported on Safari/WebKit (iOS). See:
+ * https://caniuse.com/?search=host-context
+ * https://github.com/w3c/csswg-drafts/issues/1914
  */
-:host-context(ion-app.keyboard-showing):not([slot="top"]) {
+:host(.tab-bar-hidden) {
   /* stylelint-disable-next-line declaration-no-important */
   display: none !important;
 }
